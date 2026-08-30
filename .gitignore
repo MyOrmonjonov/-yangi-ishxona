@@ -42,3 +42,6 @@ application-local.properties
 
 ### Claude Code local state ###
 .claude/
+
+### Private defense prep (not for the public repo) ###
+ПОДГОТОВКА_К_ЗАЩИТЕ.md
