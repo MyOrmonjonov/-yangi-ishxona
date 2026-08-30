@@ -65,12 +65,61 @@ public class MiniAppController {
                 messages.t(updated.getLanguage(), "common.role." + updated.getRole()), updated.getLanguage().name());
     }
 
+    @GetMapping("/users")
+    public List<UserOption> users(HttpServletRequest request) {
+        resolveUser(request);
+        return userService.allUsers().stream()
+                .map(u -> new UserOption(u.getId(), u.getFullName(), u.getPosition()))
+                .toList();
+    }
+
     @GetMapping("/projects")
     public List<ProjectRow> projects(HttpServletRequest request) {
         AppUser user = resolveUser(request);
         return projectService.visibleProjectsFor(user).stream()
                 .map(p -> rowMapper.toProjectRow(p, user.getLanguage()))
                 .toList();
+    }
+
+    @PostMapping("/projects")
+    public ProjectRow createProject(@RequestBody NewProjectRequest body, HttpServletRequest request) {
+        AppUser user = resolveUser(request);
+        LocalDate deadline = DeadlineParser.parse(body.deadline());
+        if (deadline == null) {
+            throw new DomainException("bot.deadline.invalid");
+        }
+        Project project = projectService.create(user, body.name(), body.description(), null, deadline);
+        return rowMapper.toProjectRow(project, user.getLanguage());
+    }
+
+    @PostMapping("/projects/{projectId}/sprints")
+    public SprintRow createSprint(@PathVariable Long projectId, @RequestBody NewSprintRequest body, HttpServletRequest request) {
+        AppUser user = resolveUser(request);
+        Project project = projectService.getForView(user, projectId);
+        LocalDate deadline = DeadlineParser.parse(body.deadline());
+        if (deadline == null) {
+            throw new DomainException("bot.deadline.invalid");
+        }
+        Sprint sprint = sprintService.create(user, project, body.name(), deadline);
+        return rowMapper.toSprintRow(sprint, user.getLanguage());
+    }
+
+    @PostMapping("/projects/{projectId}/sprints/{sprintId}/tasks")
+    public TaskRow createTask(@PathVariable Long projectId, @PathVariable Long sprintId,
+                               @RequestBody NewTaskRequest body, HttpServletRequest request) {
+        AppUser user = resolveUser(request);
+        Project project = projectService.getForView(user, projectId);
+        Sprint sprint = sprintService.findById(sprintId)
+                .filter(s -> s.getProject().getId().equals(project.getId()))
+                .orElseThrow(() -> new DomainException("error.sprint.notFound"));
+        AppUser executor = userService.findById(body.executorId())
+                .orElseThrow(() -> new DomainException("error.executor.notFound"));
+        LocalDate deadline = DeadlineParser.parse(body.deadline());
+        if (deadline == null) {
+            throw new DomainException("bot.deadline.invalid");
+        }
+        Task task = taskService.create(sprint, body.name(), body.description(), executor, deadline);
+        return rowMapper.toTaskRow(task, user.getLanguage());
     }
 
     @GetMapping("/projects/{id}")

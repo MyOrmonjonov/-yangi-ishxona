@@ -113,12 +113,12 @@ html, body {
 
 .field { margin-bottom: 12px; }
 .field label { display: block; font-size: 0.82em; color: var(--hint); margin-bottom: 5px; font-weight: 600; }
-.field input, .field textarea {
+.field input, .field textarea, .field select {
     width: 100%; border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px;
     font-size: 0.95em; background: var(--bg); color: var(--text); font-family: inherit;
     transition: border-color 0.15s var(--ease);
 }
-.field input:focus, .field textarea:focus { outline: none; border-color: var(--link); }
+.field input:focus, .field textarea:focus, .field select:focus { outline: none; border-color: var(--link); }
 
 .comment-item, .history-item { padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 0.9em; }
 .comment-item:last-child, .history-item:last-child { border-bottom: none; }

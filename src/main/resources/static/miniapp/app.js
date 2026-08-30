@@ -23,7 +23,12 @@
       send: "Yuborish", errorGeneric: "Xatolik yuz berdi",
       needStart: "Iltimos, avval botga /start yuboring.", postponeSent: "So'rov yuborildi, rahbar javobini kuting",
       commentAdded: "Izoh qo'shildi", statusUpdated: "Holat yangilandi",
-      cancelTitle: "Vazifani bekor qilish", postponeTitle: "Muddatni ko'chirish", dismiss: "Yopish"
+      cancelTitle: "Vazifani bekor qilish", postponeTitle: "Muddatni ko'chirish", dismiss: "Yopish",
+      newProject: "Yangi loyiha", newSprint: "Yangi sprint", newTask: "Yangi vazifa",
+      namePlaceholder: "Nomi", descriptionPlaceholder: "Tavsif (ixtiyoriy)",
+      deadlinePlaceholder: "KK.OO.YYYY yoki 'ertaga'", executorLabel: "Ijrochi",
+      create: "Yaratish", createdProject: "Loyiha yaratildi", createdSprint: "Sprint yaratildi",
+      createdTask: "Vazifa yaratildi", nameRequired: "Nomini kiriting"
     },
     ru: {
       projects: "Проекты", sprints: "Спринты",
@@ -38,7 +43,12 @@
       send: "Отправить", errorGeneric: "Произошла ошибка",
       needStart: "Сначала напишите боту /start.", postponeSent: "Запрос отправлен, ожидайте решения руководителя",
       commentAdded: "Комментарий добавлен", statusUpdated: "Статус обновлён",
-      cancelTitle: "Отмена задачи", postponeTitle: "Перенос срока", dismiss: "Закрыть"
+      cancelTitle: "Отмена задачи", postponeTitle: "Перенос срока", dismiss: "Закрыть",
+      newProject: "Новый проект", newSprint: "Новый спринт", newTask: "Новая задача",
+      namePlaceholder: "Название", descriptionPlaceholder: "Описание (необязательно)",
+      deadlinePlaceholder: "ДД.ММ.ГГГГ или «завтра»", executorLabel: "Исполнитель",
+      create: "Создать", createdProject: "Проект создан", createdSprint: "Спринт создан",
+      createdTask: "Задача создана", nameRequired: "Введите название"
     },
     en: {
       projects: "Projects", sprints: "Sprints",
@@ -53,7 +63,12 @@
       send: "Send", errorGeneric: "An error occurred",
       needStart: "Please send /start to the bot first.", postponeSent: "Request sent, awaiting manager's decision",
       commentAdded: "Comment added", statusUpdated: "Status updated",
-      cancelTitle: "Cancel task", postponeTitle: "Postpone deadline", dismiss: "Close"
+      cancelTitle: "Cancel task", postponeTitle: "Postpone deadline", dismiss: "Close",
+      newProject: "New project", newSprint: "New sprint", newTask: "New task",
+      namePlaceholder: "Name", descriptionPlaceholder: "Description (optional)",
+      deadlinePlaceholder: "DD.MM.YYYY or 'tomorrow'", executorLabel: "Executor",
+      create: "Create", createdProject: "Project created", createdSprint: "Sprint created",
+      createdTask: "Task created", nameRequired: "Enter a name"
     }
   };
 
@@ -92,6 +107,7 @@
   const content = document.getElementById('content');
   const pageTitle = document.getElementById('pageTitle');
   const backBtn = document.getElementById('backBtn');
+  const addBtn = document.getElementById('addBtn');
 
   backBtn.addEventListener('click', () => { if (stack.length > 1) popView(); });
   if (tg && tg.BackButton) {
@@ -168,6 +184,8 @@
       if (stack.length > 1) tg.BackButton.show(); else tg.BackButton.hide();
     }
     content.innerHTML = skeletonList(current.view === 'task' ? 3 : 4);
+    addBtn.hidden = true;
+    addBtn.onclick = null;
     try {
       if (current.view === 'projects') await renderProjects();
       else if (current.view === 'project') await renderProject(current.params.id);
@@ -197,6 +215,8 @@
     content.querySelectorAll('.row-card').forEach(el => {
       el.addEventListener('click', () => pushView('project', { id: el.dataset.id }));
     });
+    addBtn.hidden = false;
+    addBtn.onclick = openNewProjectSheet;
   }
 
   async function renderProject(id) {
@@ -226,6 +246,8 @@
     content.querySelectorAll('.row-card').forEach(el => {
       el.addEventListener('click', () => pushView('sprint', { projectId: id, sprintId: el.dataset.id, overdueOnly: false }));
     });
+    addBtn.hidden = false;
+    addBtn.onclick = () => openNewSprintSheet(id);
   }
 
   async function renderSprint(current) {
@@ -258,6 +280,8 @@
       current.params.overdueOnly = !overdueOnly;
       render();
     });
+    addBtn.hidden = false;
+    addBtn.onclick = () => openNewTaskSheet(projectId, sprintId);
   }
 
   async function renderTask(id) {
@@ -376,6 +400,80 @@
       try {
         await api('/tasks/' + id + '/comment', { method: 'POST', body: JSON.stringify({ text }) });
         showToast(t('commentAdded'));
+        render();
+      } catch (e) { showToast(e.message); }
+    });
+  }
+
+  function openNewProjectSheet() {
+    const sheet = openSheet(t('newProject'),
+        '<div class="field"><label>' + esc(t('namePlaceholder')) + '</label>' +
+        '<input type="text" id="newName" autofocus/></div>' +
+        '<div class="field"><label>' + esc(t('deadlinePlaceholder')) + '</label>' +
+        '<input type="text" id="newDeadline"/></div>' +
+        '<div class="field"><label>' + esc(t('descriptionPlaceholder')) + '</label>' +
+        '<textarea id="newDescription" rows="2"></textarea></div>' +
+        '<div class="sheet-actions"><button class="btn" id="confirmCreateBtn" style="width:100%;">' + esc(t('create')) + '</button></div>');
+    sheet.querySelector('#confirmCreateBtn').addEventListener('click', async () => {
+      const name = sheet.querySelector('#newName').value.trim();
+      const deadline = sheet.querySelector('#newDeadline').value.trim();
+      const description = sheet.querySelector('#newDescription').value.trim();
+      if (!name) { showToast(t('nameRequired')); return; }
+      try {
+        await api('/projects', { method: 'POST', body: JSON.stringify({ name, deadline, description }) });
+        closeSheet();
+        showToast(t('createdProject'));
+        render();
+      } catch (e) { showToast(e.message); }
+    });
+  }
+
+  function openNewSprintSheet(projectId) {
+    const sheet = openSheet(t('newSprint'),
+        '<div class="field"><label>' + esc(t('namePlaceholder')) + '</label>' +
+        '<input type="text" id="newName" autofocus/></div>' +
+        '<div class="field"><label>' + esc(t('deadlinePlaceholder')) + '</label>' +
+        '<input type="text" id="newDeadline"/></div>' +
+        '<div class="sheet-actions"><button class="btn" id="confirmCreateBtn" style="width:100%;">' + esc(t('create')) + '</button></div>');
+    sheet.querySelector('#confirmCreateBtn').addEventListener('click', async () => {
+      const name = sheet.querySelector('#newName').value.trim();
+      const deadline = sheet.querySelector('#newDeadline').value.trim();
+      if (!name) { showToast(t('nameRequired')); return; }
+      try {
+        await api('/projects/' + projectId + '/sprints', { method: 'POST', body: JSON.stringify({ name, deadline }) });
+        closeSheet();
+        showToast(t('createdSprint'));
+        render();
+      } catch (e) { showToast(e.message); }
+    });
+  }
+
+  async function openNewTaskSheet(projectId, sprintId) {
+    let users = [];
+    try { users = await api('/users'); } catch (e) { showToast(e.message); return; }
+    const options = users.map(u => '<option value="' + u.id + '">' + esc(u.fullName) + ' — ' + esc(u.position) + '</option>').join('');
+    const sheet = openSheet(t('newTask'),
+        '<div class="field"><label>' + esc(t('namePlaceholder')) + '</label>' +
+        '<input type="text" id="newName" autofocus/></div>' +
+        '<div class="field"><label>' + esc(t('executorLabel')) + '</label>' +
+        '<select id="newExecutor">' + options + '</select></div>' +
+        '<div class="field"><label>' + esc(t('deadlinePlaceholder')) + '</label>' +
+        '<input type="text" id="newDeadline"/></div>' +
+        '<div class="field"><label>' + esc(t('descriptionPlaceholder')) + '</label>' +
+        '<textarea id="newDescription" rows="2"></textarea></div>' +
+        '<div class="sheet-actions"><button class="btn" id="confirmCreateBtn" style="width:100%;">' + esc(t('create')) + '</button></div>');
+    sheet.querySelector('#confirmCreateBtn').addEventListener('click', async () => {
+      const name = sheet.querySelector('#newName').value.trim();
+      const deadline = sheet.querySelector('#newDeadline').value.trim();
+      const description = sheet.querySelector('#newDescription').value.trim();
+      const executorId = parseInt(sheet.querySelector('#newExecutor').value, 10);
+      if (!name) { showToast(t('nameRequired')); return; }
+      try {
+        await api('/projects/' + projectId + '/sprints/' + sprintId + '/tasks', {
+          method: 'POST', body: JSON.stringify({ name, deadline, description, executorId })
+        });
+        closeSheet();
+        showToast(t('createdTask'));
         render();
       } catch (e) { showToast(e.message); }
     });
