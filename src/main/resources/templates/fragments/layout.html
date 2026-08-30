@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<th:block th:fragment="pageHead(title)">
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>
+    <title th:text="${title} + ' — ' + #{common.appName}">Дашборд проектов</title>
+    <style>
+        :root {
+            --green: #22a559; --yellow: #d9a441; --red: #d9534f; --neutral: #9aa0ac;
+            --bg: #f4f6fb; --card: #ffffff; --border: #e4e7ee; --text: #1f2430; --muted: #6b7280;
+            --accent: #3457d5;
+        }
+        * { box-sizing: border-box; }
+        body { margin: 0; font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif; background: var(--bg); color: var(--text); }
+        a { color: var(--accent); text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        .navbar { display: flex; align-items: center; justify-content: space-between; background: var(--card); border-bottom: 1px solid var(--border); padding: 14px 28px; position: sticky; top: 0; z-index: 10; }
+        .navbar .brand { font-weight: 700; font-size: 1.1em; }
+        .navbar .brand a { color: var(--text); }
+        .navbar .user-info { display: flex; align-items: center; gap: 14px; font-size: 0.92em; color: var(--muted); }
+        .navbar form { margin: 0; }
+        .btn { display: inline-block; padding: 7px 14px; border-radius: 8px; border: 1px solid var(--border); background: var(--card); color: var(--text); cursor: pointer; font-size: 0.9em; }
+        .btn:hover { background: #f0f1f5; text-decoration: none; }
+        .btn-primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+        .btn-primary:hover { opacity: 0.9; }
+        .container { max-width: 1120px; margin: 28px auto; padding: 0 20px; }
+        .breadcrumbs { font-size: 0.85em; color: var(--muted); margin-bottom: 14px; }
+        h1 { font-size: 1.5em; margin: 0 0 6px; }
+        h2 { font-size: 1.15em; margin: 28px 0 12px; }
+        .subtitle { color: var(--muted); margin-bottom: 20px; }
+        table { width: 100%; border-collapse: collapse; background: var(--card); border-radius: 10px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+        th, td { padding: 12px 14px; text-align: left; border-bottom: 1px solid var(--border); font-size: 0.93em; }
+        th { color: var(--muted); font-weight: 600; font-size: 0.8em; text-transform: uppercase; letter-spacing: 0.03em; }
+        tr:last-child td { border-bottom: none; }
+        tbody tr:hover { background: #f8f9fc; }
+        .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 7px; vertical-align: middle; }
+        .dot.green { background: var(--green); } .dot.yellow { background: var(--yellow); }
+        .dot.red { background: var(--red); } .dot.neutral { background: var(--neutral); }
+        .badge { display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 0.8em; background: #eef0f6; color: var(--text); }
+        .progress { width: 100px; height: 8px; background: #eef0f6; border-radius: 4px; overflow: hidden; display: inline-block; vertical-align: middle; }
+        .progress > div { height: 100%; background: var(--accent); }
+        .filters { display: flex; gap: 12px; align-items: center; margin-bottom: 16px; flex-wrap: wrap; }
+        .filters select, .filters label { font-size: 0.9em; }
+        .card { background: var(--card); border-radius: 10px; padding: 20px 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); margin-bottom: 20px; }
+        .empty { color: var(--muted); padding: 30px; text-align: center; }
+        .comment { padding: 10px 0; border-bottom: 1px solid var(--border); }
+        .comment:last-child { border-bottom: none; }
+        .comment .meta { font-size: 0.8em; color: var(--muted); }
+        .error-box { background: #fdecea; border: 1px solid #f5c6cb; color: #842029; padding: 12px 16px; border-radius: 8px; margin-bottom: 16px; }
+        .lang-switch a { text-decoration: none; margin: 0 2px; font-size: 1.05em; opacity: 0.7; }
+        .lang-switch a:hover { opacity: 1; }
+    </style>
+</th:block>
+<div th:fragment="nav(user)" class="navbar">
+    <div class="brand"><a th:href="@{/projects}" th:text="#{web.login.heading}">📊 Дашборд проектов</a></div>
+    <div class="user-info">
+        <span th:if="${user != null}" th:text="${user.fullName} + ' · ' + @messages.t(user.language, 'common.role.' + user.role)">Пользователь</span>
+        <span class="lang-switch">
+            <a th:href="@{/language/uz}" title="O'zbekcha">🇺🇿</a>
+            <a th:href="@{/language/ru}" title="Русский">🇷🇺</a>
+            <a th:href="@{/language/en}" title="English">🇬🇧</a>
+        </span>
+        <form th:if="${user != null}" method="post" th:action="@{/logout}">
+            <button class="btn" type="submit" th:text="#{web.nav.logout}">Выйти</button>
+        </form>
+    </div>
+</div>
+</html>

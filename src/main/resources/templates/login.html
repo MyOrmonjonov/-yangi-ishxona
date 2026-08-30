@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: pageHead(#{web.login.title})}"></head>
+<body style="background: var(--bg); display:flex; align-items:center; justify-content:center; height:100vh; margin:0;">
+<div class="card" style="max-width:380px; text-align:center; position:relative;">
+    <div class="lang-switch" style="position:absolute; top:14px; right:16px;">
+        <a th:href="@{/language/uz}" title="O'zbekcha">🇺🇿</a>
+        <a th:href="@{/language/ru}" title="Русский">🇷🇺</a>
+        <a th:href="@{/language/en}" title="English">🇬🇧</a>
+    </div>
+    <h1 th:text="#{web.login.heading}">📊 Дашборд проектов</h1>
+    <p class="subtitle" th:text="#{web.login.subtitle}">Войдите через Telegram, чтобы посмотреть проекты и задачи.</p>
+    <div th:if="${error}" class="error-box" th:text="${error}"></div>
+    <div id="telegram-login-container" style="display:flex; justify-content:center; margin-top:16px;"></div>
+    <script async src="https://telegram.org/js/telegram-widget.js?22"
+            th:attr="data-telegram-login=${botUsername}"
+            data-size="large"
+            data-radius="8"
+            data-auth-url="/auth/telegram/callback"
+            data-request-access="write"></script>
+    <p class="subtitle" style="margin-top:20px; font-size:0.85em;"
+       th:text="#{web.login.registerHint('@' + ${botUsername})}">Ещё не зарегистрированы? Напишите боту /start.</p>
+</div>
+</body>
+</html>
