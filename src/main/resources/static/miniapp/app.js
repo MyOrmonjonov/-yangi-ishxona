@@ -5,6 +5,10 @@
   if (tg) { tg.ready(); tg.expand(); }
   const initData = tg ? tg.initData : '';
 
+  function haptic(style) {
+    try { if (tg && tg.HapticFeedback) tg.HapticFeedback.impactOccurred(style || 'light'); } catch (e) { /* ignore */ }
+  }
+
   const I18N = {
     uz: {
       projects: "Loyihalar", sprints: "Sprintlar",
@@ -18,7 +22,8 @@
       postpone: "⏳ Muddat ko'chirish", newDeadlinePlaceholder: "KK.OO.YYYY yoki 'ertaga'",
       send: "Yuborish", errorGeneric: "Xatolik yuz berdi",
       needStart: "Iltimos, avval botga /start yuboring.", postponeSent: "So'rov yuborildi, rahbar javobini kuting",
-      commentAdded: "Izoh qo'shildi", statusUpdated: "Holat yangilandi"
+      commentAdded: "Izoh qo'shildi", statusUpdated: "Holat yangilandi",
+      cancelTitle: "Vazifani bekor qilish", postponeTitle: "Muddatni ko'chirish", dismiss: "Yopish"
     },
     ru: {
       projects: "Проекты", sprints: "Спринты",
@@ -32,7 +37,8 @@
       postpone: "⏳ Перенести срок", newDeadlinePlaceholder: "ДД.ММ.ГГГГ или «завтра»",
       send: "Отправить", errorGeneric: "Произошла ошибка",
       needStart: "Сначала напишите боту /start.", postponeSent: "Запрос отправлен, ожидайте решения руководителя",
-      commentAdded: "Комментарий добавлен", statusUpdated: "Статус обновлён"
+      commentAdded: "Комментарий добавлен", statusUpdated: "Статус обновлён",
+      cancelTitle: "Отмена задачи", postponeTitle: "Перенос срока", dismiss: "Закрыть"
     },
     en: {
       projects: "Projects", sprints: "Sprints",
@@ -46,7 +52,8 @@
       postpone: "⏳ Request postpone", newDeadlinePlaceholder: "DD.MM.YYYY or 'tomorrow'",
       send: "Send", errorGeneric: "An error occurred",
       needStart: "Please send /start to the bot first.", postponeSent: "Request sent, awaiting manager's decision",
-      commentAdded: "Comment added", statusUpdated: "Status updated"
+      commentAdded: "Comment added", statusUpdated: "Status updated",
+      cancelTitle: "Cancel task", postponeTitle: "Postpone deadline", dismiss: "Close"
     }
   };
 
@@ -79,8 +86,8 @@
   }
 
   const stack = [{ view: 'projects', params: {} }];
-  function pushView(view, params) { stack.push({ view, params }); render(); }
-  function popView() { stack.pop(); render(); }
+  function pushView(view, params) { haptic('light'); stack.push({ view, params }); render(); }
+  function popView() { haptic('light'); stack.pop(); render(); }
 
   const content = document.getElementById('content');
   const pageTitle = document.getElementById('pageTitle');
@@ -93,6 +100,7 @@
 
   document.querySelectorAll('.lang-switch button').forEach(btn => {
     btn.addEventListener('click', async () => {
+      haptic('light');
       lang = btn.dataset.lang;
       localStorage.setItem('miniapp_lang', lang);
       updateLangButtons();
@@ -123,13 +131,43 @@
 
   function dot(cls) { return '<span class="dot ' + esc(cls) + '"></span>'; }
 
+  // ------------------------------------------------------------------ //
+  // Bottom sheet (mirrors the native-app "sheet" pattern for actions
+  // that need a bit more room than an inline button, e.g. reason/date entry)
+  // ------------------------------------------------------------------ //
+  function openSheet(titleText, bodyHtml) {
+    closeSheet();
+    const overlay = document.createElement('div');
+    overlay.className = 'sheet-overlay';
+    overlay.id = 'activeSheet';
+    overlay.innerHTML =
+        '<div class="sheet">' +
+        '<div class="sheet-handle"></div>' +
+        '<h3>' + esc(titleText) + '</h3>' +
+        '<div class="sheet-body">' + bodyHtml + '</div>' +
+        '</div>';
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) closeSheet(); });
+    document.body.appendChild(overlay);
+    return overlay;
+  }
+  function closeSheet() {
+    const el = document.getElementById('activeSheet');
+    if (el) el.remove();
+  }
+
+  function skeletonList(count) {
+    let html = '<div class="skeleton-list">';
+    for (let i = 0; i < (count || 4); i++) html += '<div class="skeleton-card"></div>';
+    return html + '</div>';
+  }
+
   async function render() {
     const current = stack[stack.length - 1];
     backBtn.hidden = stack.length <= 1;
     if (tg && tg.BackButton) {
       if (stack.length > 1) tg.BackButton.show(); else tg.BackButton.hide();
     }
-    content.innerHTML = '<div class="loading">' + t('loading') + '</div>';
+    content.innerHTML = skeletonList(current.view === 'task' ? 3 : 4);
     try {
       if (current.view === 'projects') await renderProjects();
       else if (current.view === 'project') await renderProject(current.params.id);
@@ -216,6 +254,7 @@
       el.addEventListener('click', () => pushView('task', { id: el.dataset.id }));
     });
     document.getElementById('overdueChip').addEventListener('click', () => {
+      haptic('light');
       current.params.overdueOnly = !overdueOnly;
       render();
     });
@@ -231,16 +270,7 @@
         esc(t('status')) + ': <span class="badge">' + esc(data.statusLabel) + '</span> · ' +
         esc(t('deadline')) + ': ' + esc(data.deadlineLabel) + '</p>' +
         '<div class="actions" id="taskActions"></div>' +
-        '<div class="field" id="cancelForm" style="display:none; margin-top:8px;">' +
-        '<label>' + esc(t('cancelReasonPlaceholder')) + '</label>' +
-        '<textarea id="cancelReasonInput" rows="2"></textarea>' +
-        '<button class="btn danger" id="confirmCancelBtn" style="margin-top:6px;">' + esc(t('cancel')) + '</button>' +
-        '</div>' +
-        '<div class="field" id="postponeForm" style="display:none; margin-top:8px;">' +
-        '<label>' + esc(t('newDeadlinePlaceholder')) + '</label>' +
-        '<input type="text" id="postponeInput" placeholder="' + esc(t('newDeadlinePlaceholder')) + '"/>' +
-        '<button class="btn secondary" id="confirmPostponeBtn" style="margin-top:6px;">' + esc(t('send')) + '</button>' +
-        '</div></div>';
+        '</div>';
 
     html += '<div class="card"><h2>' + esc(t('attachments')) + '</h2>';
     if (!data.attachments.length) {
@@ -298,32 +328,45 @@
 
     const cancelBtn = document.getElementById('cancelBtn');
     if (cancelBtn) cancelBtn.addEventListener('click', () => {
-      document.getElementById('cancelForm').style.display = 'block';
-    });
-    const confirmCancelBtn = document.getElementById('confirmCancelBtn');
-    if (confirmCancelBtn) confirmCancelBtn.addEventListener('click', async () => {
-      const reason = document.getElementById('cancelReasonInput').value.trim();
-      if (!reason) return;
-      try {
-        await api('/tasks/' + id + '/status', { method: 'POST', body: JSON.stringify({ status: 'CANCELLED', comment: reason }) });
-        showToast(t('statusUpdated'));
-        render();
-      } catch (e) { showToast(e.message); }
+      haptic('light');
+      const sheet = openSheet(t('cancelTitle'),
+          '<div class="field"><label>' + esc(t('cancelReasonPlaceholder')) + '</label>' +
+          '<textarea id="cancelReasonInput" rows="3" autofocus></textarea></div>' +
+          '<div class="sheet-actions">' +
+          '<button class="btn secondary" id="sheetCancelBtn">' + esc(t('dismiss')) + '</button>' +
+          '<button class="btn danger" id="confirmCancelBtn">' + esc(t('cancel')) + '</button>' +
+          '</div>');
+      sheet.querySelector('#sheetCancelBtn').addEventListener('click', closeSheet);
+      sheet.querySelector('#confirmCancelBtn').addEventListener('click', async () => {
+        const reason = sheet.querySelector('#cancelReasonInput').value.trim();
+        if (!reason) return;
+        try {
+          await api('/tasks/' + id + '/status', { method: 'POST', body: JSON.stringify({ status: 'CANCELLED', comment: reason }) });
+          closeSheet();
+          showToast(t('statusUpdated'));
+          render();
+        } catch (e) { showToast(e.message); }
+      });
     });
 
     const postponeBtn = document.getElementById('postponeBtn');
     if (postponeBtn) postponeBtn.addEventListener('click', () => {
-      document.getElementById('postponeForm').style.display = 'block';
-    });
-    const confirmPostponeBtn = document.getElementById('confirmPostponeBtn');
-    if (confirmPostponeBtn) confirmPostponeBtn.addEventListener('click', async () => {
-      const value = document.getElementById('postponeInput').value.trim();
-      if (!value) return;
-      try {
-        await api('/tasks/' + id + '/postpone', { method: 'POST', body: JSON.stringify({ newDeadline: value }) });
-        showToast(t('postponeSent'));
-        document.getElementById('postponeForm').style.display = 'none';
-      } catch (e) { showToast(e.message); }
+      haptic('light');
+      const sheet = openSheet(t('postponeTitle'),
+          '<div class="field"><label>' + esc(t('newDeadlinePlaceholder')) + '</label>' +
+          '<input type="text" id="postponeInput" placeholder="' + esc(t('newDeadlinePlaceholder')) + '"/></div>' +
+          '<div class="sheet-actions">' +
+          '<button class="btn" id="confirmPostponeBtn" style="width:100%;">' + esc(t('send')) + '</button>' +
+          '</div>');
+      sheet.querySelector('#confirmPostponeBtn').addEventListener('click', async () => {
+        const value = sheet.querySelector('#postponeInput').value.trim();
+        if (!value) return;
+        try {
+          await api('/tasks/' + id + '/postpone', { method: 'POST', body: JSON.stringify({ newDeadline: value }) });
+          closeSheet();
+          showToast(t('postponeSent'));
+        } catch (e) { showToast(e.message); }
+      });
     });
 
     const sendCommentBtn = document.getElementById('sendCommentBtn');
@@ -339,6 +382,7 @@
   }
 
   async function doStatusChange(id, status) {
+    haptic('medium');
     try {
       await api('/tasks/' + id + '/status', { method: 'POST', body: JSON.stringify({ status }) });
       showToast(t('statusUpdated'));
