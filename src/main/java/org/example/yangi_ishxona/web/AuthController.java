@@ -32,7 +32,10 @@ public class AuthController {
 
     @GetMapping("/login")
     public String login(Model model) {
-        model.addAttribute("botUsername", botUsername);
+        // Defensive trim: a stray leading/trailing space in TELEGRAM_BOT_USERNAME (easy to
+        // introduce when pasting into a hosting dashboard's env var field) makes the Telegram
+        // Login Widget reject it outright with "Username invalid" and never render the button.
+        model.addAttribute("botUsername", botUsername == null ? "" : botUsername.trim());
         return "login";
     }
 
