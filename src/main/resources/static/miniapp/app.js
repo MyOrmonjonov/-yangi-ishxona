@@ -28,7 +28,9 @@
       namePlaceholder: "Nomi", descriptionPlaceholder: "Tavsif (ixtiyoriy)",
       deadlinePlaceholder: "KK.OO.YYYY yoki 'ertaga'", executorLabel: "Ijrochi",
       create: "Yaratish", createdProject: "Loyiha yaratildi", createdSprint: "Sprint yaratildi",
-      createdTask: "Vazifa yaratildi", nameRequired: "Nomini kiriting"
+      createdTask: "Vazifa yaratildi", nameRequired: "Nomini kiriting",
+      navProjects: "Loyihalar", navMyTasks: "Vazifalarim", myTasks: "Mening vazifalarim",
+      noTasks: "Sizda hozircha vazifalar yo'q"
     },
     ru: {
       projects: "Проекты", sprints: "Спринты",
@@ -48,7 +50,9 @@
       namePlaceholder: "Название", descriptionPlaceholder: "Описание (необязательно)",
       deadlinePlaceholder: "ДД.ММ.ГГГГ или «завтра»", executorLabel: "Исполнитель",
       create: "Создать", createdProject: "Проект создан", createdSprint: "Спринт создан",
-      createdTask: "Задача создана", nameRequired: "Введите название"
+      createdTask: "Задача создана", nameRequired: "Введите название",
+      navProjects: "Проекты", navMyTasks: "Мои задачи", myTasks: "Мои задачи",
+      noTasks: "У вас пока нет задач"
     },
     en: {
       projects: "Projects", sprints: "Sprints",
@@ -68,7 +72,9 @@
       namePlaceholder: "Name", descriptionPlaceholder: "Description (optional)",
       deadlinePlaceholder: "DD.MM.YYYY or 'tomorrow'", executorLabel: "Executor",
       create: "Create", createdProject: "Project created", createdSprint: "Sprint created",
-      createdTask: "Task created", nameRequired: "Enter a name"
+      createdTask: "Task created", nameRequired: "Enter a name",
+      navProjects: "Projects", navMyTasks: "My tasks", myTasks: "My tasks",
+      noTasks: "You have no tasks yet"
     }
   };
 
@@ -100,19 +106,30 @@
     return res.status === 204 ? null : res.json();
   }
 
-  const stack = [{ view: 'projects', params: {} }];
+  let stack = [{ view: 'projects', params: {} }];
   function pushView(view, params) { haptic('light'); stack.push({ view, params }); render(); }
   function popView() { haptic('light'); stack.pop(); render(); }
+  function switchRoot(root) {
+    haptic('light');
+    stack = [{ view: root, params: {} }];
+    document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('active', b.dataset.root === root));
+    render();
+  }
 
   const content = document.getElementById('content');
   const pageTitle = document.getElementById('pageTitle');
   const backBtn = document.getElementById('backBtn');
   const addBtn = document.getElementById('addBtn');
+  const bottomNav = document.querySelector('.bottom-nav');
 
   backBtn.addEventListener('click', () => { if (stack.length > 1) popView(); });
   if (tg && tg.BackButton) {
     tg.BackButton.onClick(() => { if (stack.length > 1) popView(); });
   }
+  document.getElementById('navProjects').addEventListener('click', () => switchRoot('projects'));
+  document.getElementById('navMyTasks').addEventListener('click', () => switchRoot('mytasks'));
+  document.getElementById('navProjectsLabel').textContent = t('navProjects');
+  document.getElementById('navMyTasksLabel').textContent = t('navMyTasks');
 
   document.querySelectorAll('.lang-switch button').forEach(btn => {
     btn.addEventListener('click', async () => {
@@ -123,6 +140,8 @@
       try {
         await api('/language', { method: 'POST', body: JSON.stringify({ language: lang.toUpperCase() }) });
       } catch (e) { /* not registered yet - ignore, still switch client-side chrome */ }
+      document.getElementById('navProjectsLabel').textContent = t('navProjects');
+      document.getElementById('navMyTasksLabel').textContent = t('navMyTasks');
       render();
     });
   });
@@ -188,6 +207,7 @@
     addBtn.onclick = null;
     try {
       if (current.view === 'projects') await renderProjects();
+      else if (current.view === 'mytasks') await renderMyTasks();
       else if (current.view === 'project') await renderProject(current.params.id);
       else if (current.view === 'sprint') await renderSprint(current);
       else if (current.view === 'task') await renderTask(current.params.id);
@@ -217,6 +237,32 @@
     });
     addBtn.hidden = false;
     addBtn.onclick = openNewProjectSheet;
+  }
+
+  async function renderMyTasks() {
+    pageTitle.textContent = t('myTasks');
+    const [me, tasks] = await Promise.all([api('/me'), api('/mytasks')]);
+    const initials = (me.fullName || '?').trim().split(/\s+/).map(w => w[0]).slice(0, 2).join('').toUpperCase();
+    let html = '<div class="card profile-card">' +
+        '<div class="profile-avatar">' + esc(initials) + '</div>' +
+        '<div class="profile-info">' +
+        '<div class="profile-name">' + esc(me.fullName) + '</div>' +
+        '<div class="profile-meta">' + esc(me.position) + ' · ' + esc(me.roleLabel) + '</div>' +
+        '</div></div>';
+    if (!tasks.length) {
+      html += '<div class="empty">' + t('noTasks') + '</div>';
+    } else {
+      html += '<div class="list">' + tasks.map(task => `
+        <div class="row-card" data-id="${task.id}">
+          <div class="row-title">${esc(task.name)}</div>
+          <div class="row-meta"><span class="badge">${esc(task.statusLabel)}</span></div>
+          <div class="row-meta">${dot(task.colorClass)} ${esc(task.deadlineLabel)}</div>
+        </div>`).join('') + '</div>';
+    }
+    content.innerHTML = html;
+    content.querySelectorAll('.row-card').forEach(el => {
+      el.addEventListener('click', () => pushView('task', { id: el.dataset.id }));
+    });
   }
 
   async function renderProject(id) {

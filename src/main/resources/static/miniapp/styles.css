@@ -25,6 +25,30 @@ html, body {
 
 #app { display: flex; flex-direction: column; min-height: 100vh; }
 
+.bottom-nav {
+    display: flex; background: var(--secondary-bg); border-top: 1px solid var(--border);
+    position: sticky; bottom: 0; z-index: 6; padding-bottom: env(safe-area-inset-bottom);
+}
+.nav-btn {
+    flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px;
+    background: none; border: none; padding: 8px 4px 10px; color: var(--hint);
+    font-size: 0.72em; font-weight: 600; cursor: pointer; transition: color 0.15s var(--ease);
+}
+.nav-btn .nav-icon { font-size: 1.25em; }
+.nav-btn.active { color: var(--link); }
+.nav-btn:active { transform: scale(0.95); }
+
+.profile-card {
+    display: flex; align-items: center; gap: 12px; margin-bottom: 14px;
+}
+.profile-avatar {
+    width: 46px; height: 46px; border-radius: 50%; background: var(--link); color: #fff;
+    display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 1.1em;
+    flex-shrink: 0;
+}
+.profile-info .profile-name { font-weight: 700; font-size: 1em; }
+.profile-info .profile-meta { font-size: 0.82em; color: var(--hint); margin-top: 2px; }
+
 .topbar {
     display: flex; align-items: center; gap: 8px;
     padding: 14px 16px; background: var(--secondary-bg);

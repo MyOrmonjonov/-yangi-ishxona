@@ -73,6 +73,14 @@ public class MiniAppController {
                 .toList();
     }
 
+    @GetMapping("/mytasks")
+    public List<TaskRow> myTasks(HttpServletRequest request) {
+        AppUser user = resolveUser(request);
+        return taskService.myTasks(user).stream()
+                .map(t -> rowMapper.toTaskRow(t, user.getLanguage()))
+                .toList();
+    }
+
     @GetMapping("/projects")
     public List<ProjectRow> projects(HttpServletRequest request) {
         AppUser user = resolveUser(request);
