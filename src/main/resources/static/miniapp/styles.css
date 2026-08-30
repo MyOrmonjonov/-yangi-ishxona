@@ -1,12 +1,12 @@
 :root {
-    --bg: var(--tg-theme-bg-color, #f4f6fb);
+    --bg: var(--tg-theme-bg-color, #f3f7f6);
     --secondary-bg: var(--tg-theme-secondary-bg-color, #ffffff);
-    --text: var(--tg-theme-text-color, #1f2430);
-    --hint: var(--tg-theme-hint-color, #6b7280);
-    --link: var(--tg-theme-link-color, #3457d5);
-    --button: var(--tg-theme-button-color, #3457d5);
+    --text: var(--tg-theme-text-color, #182422);
+    --hint: var(--tg-theme-hint-color, #64756f);
+    --link: var(--tg-theme-link-color, #0d8f7a);
+    --button: var(--tg-theme-button-color, #0d8f7a);
     --button-text: var(--tg-theme-button-text-color, #ffffff);
-    --border: #e4e7ee;
+    --border: #e2ebe9;
     --green: #22a559; --yellow: #d9a441; --red: #d9534f; --neutral: #9aa0ac;
 }
 
