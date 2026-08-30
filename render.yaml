@@ -1,0 +1,41 @@
+databases:
+  - name: yangi-ishxona-db
+    plan: free
+    databaseName: yangi_ishxona
+    user: yangi_ishxona
+
+services:
+  - type: web
+    name: yangi-ishxona
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    envVars:
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_BOT_USERNAME
+        sync: false
+      - key: BOOTSTRAP_DIRECTOR_TELEGRAM_ID
+        sync: false
+      - key: TELEGRAM_BOT_MODE
+        value: webhook
+      - key: PGHOST
+        fromDatabase:
+          name: yangi-ishxona-db
+          property: host
+      - key: PGPORT
+        fromDatabase:
+          name: yangi-ishxona-db
+          property: port
+      - key: PGDATABASE
+        fromDatabase:
+          name: yangi-ishxona-db
+          property: database
+      - key: PGUSER
+        fromDatabase:
+          name: yangi-ishxona-db
+          property: user
+      - key: PGPASSWORD
+        fromDatabase:
+          name: yangi-ishxona-db
+          property: password
