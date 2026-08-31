@@ -1,0 +1,52 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-task_app}
+      POSTGRES_USER: ${POSTGRES_USER:-taskapp}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-taskapp} -d ${POSTGRES_DB:-task_app}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-task_app}
+      DATABASE_USERNAME: ${POSTGRES_USER:-taskapp}
+      DATABASE_PASSWORD: ${POSTGRES_PASSWORD}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+      TELEGRAM_BOT_USERNAME: ${TELEGRAM_BOT_USERNAME:-TaskAppBot}
+      TELEGRAM_MINI_APP_URL: ${TELEGRAM_MINI_APP_URL}
+      APP_AUTH_SECRET: ${APP_AUTH_SECRET}
+      BOOTSTRAP_OWNER_TELEGRAM_ID: ${BOOTSTRAP_OWNER_TELEGRAM_ID:-0}
+      UPLOAD_DIRECTORY: /var/lib/taskapp/uploads
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash-lite}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+      GROQ_API_KEY: ${GROQ_API_KEY}
+      YANDEX_API_KEY: ${YANDEX_API_KEY}
+      YANDEX_FOLDER_ID: ${YANDEX_FOLDER_ID}
+      SELFHOSTED_STT_BASE_URL: ${SELFHOSTED_STT_BASE_URL}
+      SELFHOSTED_LLM_BASE_URL: ${SELFHOSTED_LLM_BASE_URL}
+      SELFHOSTED_STT_MODEL: ${SELFHOSTED_STT_MODEL:-Systran/faster-whisper-small}
+      SELFHOSTED_LLM_MODEL: ${SELFHOSTED_LLM_MODEL:-qwen2.5-3b-instruct}
+      SELFHOSTED_API_KEY: ${SELFHOSTED_API_KEY}
+      VOICE_PROVIDER: ${VOICE_PROVIDER:-gemini}
+    ports:
+      - "8080:8080"
+    volumes:
+      - task_files:/var/lib/taskapp/uploads
+
+volumes:
+  postgres_data:
+  task_files:

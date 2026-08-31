@@ -1,9 +1,24 @@
 HELP.md
-.gradle
-build/
-!gradle/wrapper/gradle-wrapper.jar
-!**/src/main/**/build/
-!**/src/test/**/build/
+target/
+.mvn/wrapper/maven-wrapper.jar
+!**/src/main/**/target/
+!**/src/test/**/target/
+
+### Local secrets and runtime data ###
+.env
+.env.*
+!.env.example
+data/
+uploads/
+*.log
+
+### Frontend ###
+frontend/node_modules/
+frontend/dist/
+frontend/*.tsbuildinfo
+frontend/vite.config.js
+frontend/vite.config.d.ts
+.tmp-*
 
 ### STS ###
 .apt_generated
@@ -13,18 +28,12 @@ build/
 .settings
 .springBeans
 .sts4-cache
-bin/
-!**/src/main/**/bin/
-!**/src/test/**/bin/
 
 ### IntelliJ IDEA ###
 .idea
 *.iws
 *.iml
 *.ipr
-out/
-!**/src/main/**/out/
-!**/src/test/**/out/
 
 ### NetBeans ###
 /nbproject/private/
@@ -32,16 +41,16 @@ out/
 /dist/
 /nbdist/
 /.nb-gradle/
+build/
+!**/src/main/**/build/
+!**/src/test/**/build/
 
 ### VS Code ###
 .vscode/
+.aws-keys/
+.aws-sg-id.tmp
+.aws-instance-id.tmp
 
-### Secrets ###
-.env
-application-local.properties
-
-### Claude Code local state ###
+### Claude Code local state / private notes ###
 .claude/
-
-### Private defense prep (not for the public repo) ###
 ПОДГОТОВКА_К_ЗАЩИТЕ.md

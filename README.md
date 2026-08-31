@@ -1,211 +1,71 @@
-# Дашборд управления проектами с интерфейсом в Telegram
+# Task App
 
-Прототип: сотрудники ведут всю работу через Telegram-бота (создание проектов/спринтов/задач,
-смена статусов, дедлайны, вложения), руководство и директор смотрят веб-дашборд. Дополнительно
-доступен Telegram Mini App как более удобная визуальная надстройка над теми же данными.
-Интерфейс на 3 языках: русский, узбекский, английский.
+Telegram Mini App asosidagi jamoaviy vazifalar tizimining backend poydevori.
 
-**Продакшен:** https://yangi-ishxona.onrender.com (бот: `@new_task_project_bot`)
-**Репозиторий:** https://github.com/MyOrmonjonov/-yangi-ishxona
+## Hozir ishlaydigan qismlar
 
-## Стек и почему
+- PostgreSQL uchun Flyway boshqaradigan boshlang‘ich sxema (rejadagi barcha asosiy jadvallar).
+- Telegram Mini App `initData` HMAC-SHA256 tekshiruvi va eskirish nazorati.
+- Taklifga asoslangan kirish: faol workspace a’zoligi bo‘lmasa sessiya berilmaydi.
+- Birinchi egani `BOOTSTRAP_OWNER_TELEGRAM_ID` orqali xavfsiz yaratish.
+- `/start` komandasi, uch tildagi salomlashuv va Mini App tugmasi.
+- Workspace chegarasida vazifa yaratish, filtrlash va statusni o‘zgartirish.
+- 1:1 vazifalar maxfiyligi va vazifa o‘zgarish tarixining boshlang‘ich auditi.
+- Bir xil API xato formati, validation va bearer sessiya himoyasi.
 
-- **Java 17 + Spring Boot** — исходный скелет проекта уже был на Spring Boot, экосистема
-  (Spring Data JPA, Spring MVC, Thymeleaf, `@Scheduled`) закрывает все нужды прототипа без
-  дополнительных фреймворков.
-- **PostgreSQL** (Spring Data JPA, `ddl-auto=update`) — реляционная модель (Проект → Спринт →
-  Задача, статусы, история) естественно ложится на SQL; `ddl-auto=update` — осознанное упрощение
-  для 5-дневного прототипа вместо Flyway/Liquibase.
-- **TelegramBots (`org.telegram:telegrambots-*` 10.2.1)** — актуальная модульная версия
-  официальной Java-библиотеки (long polling и webhook на выбор, `TelegramClient` для отправки).
-- **Thymeleaf** (server-side rendering) — веб-дашборд не требует SPA-сложности, простой и быстрый
-  способ выдать HTML с сессионной авторизацией через Telegram Login Widget.
-- **Ванильный JS/CSS для Mini App** — без сборщика: одна HTML-страница + `fetch` к JSON API,
-  этого достаточно для набора экранов «список → карточка».
+## Lokal ishga tushirish
 
-## Как запустить локально
+1. `.env.example` faylidan `.env` yarating va maxfiy qiymatlarni almashtiring.
+2. BotFather’da Mini App domenini sozlang. Telegram production Mini App uchun HTTPS talab qiladi.
+3. Xizmatlarni ishga tushiring:
 
-1. Скопируйте `.env.example` → `.env` и заполните `TELEGRAM_BOT_TOKEN` (получить у
-   [@BotFather](https://t.me/BotFather)) и `TELEGRAM_BOT_USERNAME`. `.env` подхватывается
-   автоматически при старте (`YangiIshxonaApplication.loadDotEnvIntoSystemProperties`).
-2. Поднимите Postgres: `docker compose up -d`.
-3. Запустите приложение: `./gradlew bootRun` (Windows: `gradlew.bat bootRun`).
-4. Бот работает в режиме long polling по умолчанию (`TELEGRAM_BOT_MODE=polling`) — вебхук не
-   нужен для локальной разработки. Дашборд: http://localhost:8080/login. Mini App:
-   http://localhost:8080/miniapp (полноценно откроется только внутри Telegram, т.к. использует
-   `Telegram.WebApp.initData`).
-
-Тесты: `./gradlew test` (использует H2 в режиме совместимости с PostgreSQL, реального Postgres
-не требует).
-
-## Схема данных
-
-```
-AppUser (telegramUserId, fullName, position, role, language)
-Project (name, description, customer, responsible→AppUser, deadline, status)
- └─ Sprint (name, responsible→AppUser, deadline, status)
-     └─ Task (name, description, executor→AppUser, deadline, status)
-         ├─ TaskComment (text, author→AppUser)
-         ├─ TaskAttachment (telegramFileId, originalFileName, uploadedBy→AppUser)
-         └─ DeadlineChangeRequest (oldDeadline, newDeadline, status, requestedBy, resolvedBy)
-StatusHistory (entityType, entityId, oldStatus, newStatus, changedBy, comment)
-DeadlineNotificationLog (task, notificationType, scheduledFor, sentAt)
+```powershell
+docker compose --env-file .env up --build
 ```
 
-Статус `Project`/`Sprint` **не хранится вручную** — пересчитывается `StatusRollupService` при
-каждом изменении дочерней задачи: если все дети отменены → `CANCELLED`; если все (кроме
-отменённых) выполнены → `DONE`; если хоть один начат → `IN_PROGRESS`; иначе → `NOT_STARTED`.
+Tekshiruv: `GET http://localhost:8080/api/health`.
 
-## Архитектура
+Docker ishlatmasdan ishga tushirish uchun PostgreSQL yarating, kerakli environment qiymatlarini bering va:
 
-```
-domain/       JPA-сущности и enum'ы
-repository/   Spring Data JPA репозитории
-service/      бизнес-логика (Project/Sprint/Task/User/StatusRollup/DeadlineScheduler),
-              i18n (Messages, DomainException с ключом+аргументами вместо текста)
-bot/          Telegram-бот (YangiIshxonaBot — единая точка входа updates), пошаговые диалоги
-              через ChatSession/ChatState, DeadlineParser (даты + "через N дней")
-web/          Thymeleaf-контроллеры дашборда, Telegram Login, Mini App REST API,
-              приём вебхука, обработка ошибок
-config/       регистрация бота (polling или webhook), кнопка меню Mini App
-resources/
-  i18n/       messages_{uz,ru,en}.properties — один источник переводов для бота,
-              дашборда (Spring MessageSource, th:text="#{...}") и Mini App API
-  templates/  Thymeleaf-страницы дашборда + оболочка Mini App
-  static/miniapp/  app.js (vanilla JS, без сборщика) + styles.css
+```powershell
+.\mvnw.cmd spring-boot:run
 ```
 
-Ключевое: `DomainException` несёт **ключ перевода + аргументы**, а не готовый текст — рендерится
-в языке конкретного пользователя (`Messages.t(user.getLanguage(), key, args…)`) в месте перехвата
-(бот / дашборд / Mini App API), поэтому один и тот же код ошибки одинаково звучит на всех
-поверхностях и на всех 3 языках.
+## Autentifikatsiya oqimi
 
-### Дедлайны и уведомления (ТЗ 3.6)
+Frontend `Telegram.WebApp.initData` qiymatini o‘zgartirmasdan yuboradi:
 
-`DeadlineSchedulerService` каждые 10 минут (`app.scheduler.deadline-check-interval-ms`) в две
-фазы: 1) помечает наступившие триггеры (T‑24ч / в момент дедлайна / +24ч просрочки) как
-"поставлены в очередь" (`DeadlineNotificationLog`, идемпотентно — повторный проход не создаёт
-дубликат); 2) если сейчас 09:00–20:00 по Asia/Tashkent — рассылает всё, что в очереди. Ночной
-триггер просто ждёт следующего прохода после 09:00 — то же событие, тот же механизм, никакого
-отдельного "утреннего" кода.
+```http
+POST /api/auth/telegram
+Content-Type: application/json
 
-### Telegram Mini App
+{"initData":"query_id=...&user=...&auth_date=...&hash=..."}
+```
 
-Бот и дашборд — обязательная часть ТЗ (3.1–3.7). Mini App добавлен по отдельному запросу поверх
-готового решения как визуальная надстройка: просмотр проектов/спринтов/задач, смена статуса,
-комментарии, запрос переноса срока. Аутентификация — не сессия, а `Telegram.WebApp.initData`
-(заголовок `X-Telegram-Init-Data`), проверяется на бэкенде отдельным алгоритмом
-(`TelegramWebAppAuthService`, HMAC-SHA256 с ключом `"WebAppData"` — не путать с алгоритмом Login
-Widget, который использует SHA256(token) напрямую). REST-слой (`MiniAppController`) не содержит
-своей бизнес-логики — вызывает те же `ProjectService`/`SprintService`/`TaskService`, что бот и
-дашборд.
+Javobdagi `accessToken` keyingi API so‘rovlarida `Authorization: Bearer <token>` sifatida yuboriladi.
 
-**Ограничение:** перевод задачи в статус «На проверке» требует прикреплённого файла (ТЗ 3.5) —
-загрузка файлов в Mini App не реализована (усложнение, не входящее в обязательный объём), поэтому
-это действие остаётся в чат-боте; Mini App показывает остальные доступные действия по задаче.
+## Bazaviy vazifa API
 
-## Принятые допущения
+- `GET /api/tasks?workspaceId=1&scope=ACTIVE`
+- `POST /api/tasks`
+- `PATCH /api/tasks/{taskId}/status`
 
-- **Роль "Руководитель проекта" — не глобальная, а по факту создания.** Сотрудник, создавший
-  проект, становится его `responsible` и получает роль `PROJECT_MANAGER` (если был `EMPLOYEE`).
-  ТЗ не описывает механизм назначения этой роли — решено так, чтобы не требовать отдельного
-  админ-интерфейса для базового сценария.
-- **Первый директор — через `BOOTSTRAP_DIRECTOR_TELEGRAM_ID`.** Если переменная не задана, им
-  становится первый когда-либо зарегистрированный пользователь. Последующих директоров назначает
-  действующий директор командой `/setrole`.
-- **Создавать проект/спринт/задачу может любой зарегистрированный сотрудник** — ТЗ 3.1 описывает
-  разграничение по *просмотру* (кто что видит), не по созданию; раздел 2 явно перечисляет
-  создание проекта/задачи как действие "всех сотрудников".
-- **Дедлайн — календарная дата, без времени.** Для расчёта "T-24 часа" момент дедлайна берётся
-  как конец дня (23:59:59) по Asia/Tashkent.
-- **Отчёт о просрочке директору — это сама сводка на дашборде** (директор видит все просроченные
-  задачи через цветовую индикацию), а не отдельная push-рассылка — ТЗ говорит "в сводку
-  директору", не "директору лично".
-- **Прикреплённые файлы отдаются через собственный сервер** (`/attachments/{id}/open`), а не
-  прямой ссылкой на `api.telegram.org/file/bot<token>/...` — иначе токен бота попадал бы в
-  адресную строку браузера.
+Qo‘llab-quvvatlangan `scope`: `ALL`, `MINE`, `ACTIVE`, `COMPLETED`, `OVERDUE`, `TODAY`, `UPCOMING`.
 
-## Что не успел / известные ограничения
+## Muhit sozlamalari
 
-- **Render free tier "засыпает"** после 15 минут простоя; первый вебхук после паузы будит сервис
-  ~30–60 сек (Telegram в это время повторяет доставку — сообщения не теряются, но приходят с
-  задержкой). Смягчено GitHub Actions-пингом каждые 10 минут (`.github/workflows/keepalive.yml`);
-  полностью решается переходом на платный план или другой хостинг без сна.
-- **Бесплатный Postgres на Render истекает через 30 дней** — ограничение самого бесплатного
-  тарифа Render, не относится к архитектуре решения.
-- Фильтр в Mini App упрощён до «только просроченные» (без выбора исполнителя/статуса, в отличие
-  от дашборда) — сознательное сокращение объёма второстепенного (Mini App не входит в ТЗ)
-  интерфейса при ограничении по времени.
-- Экспорт в Excel и отдельный отчёт «загрузка сотрудников» (оба — «плюсом» по ТЗ 5) не сделаны.
+| O‘zgaruvchi | Maqsadi |
+|---|---|
+| `DATABASE_URL` | PostgreSQL JDBC URL |
+| `DATABASE_USERNAME`, `DATABASE_PASSWORD` | DB kirish ma’lumoti |
+| `TELEGRAM_BOT_TOKEN` | BotFather tokeni |
+| `TELEGRAM_MINI_APP_URL` | HTTPS frontend manzili |
+| `APP_AUTH_SECRET` | Ichki access token imzolash kaliti |
+| `BOOTSTRAP_OWNER_TELEGRAM_ID` | Dastlabki workspace egasining Telegram ID’si |
+| `UPLOAD_DIRECTORY` | Yopiq fayllar papkasi |
 
-## Масштабирование (100 пользователей / 50 проектов / ~5000 задач)
+`APP_AUTH_SECRET` production’da tasodifiy va kamida 32 belgili bo‘lishi kerak. `.env` faylini repozitoriyga qo‘shmang.
 
-Текущая архитектура выдержит эти цифры без изменений: 5000 строк в таблице `task` с индексом по
-внешнему ключу и обычными выборками (`WHERE sprint_id = ...`) — это доли миллисекунды для
-PostgreSQL, никаких пагинаций/кэшей на этом объёме не требуется. Осознанные компромиссы, которые
-**перестанут** быть верными при росте на порядок-два дальше (не при 100/50/5000, а условно при
-10 000+ пользователей или 500+ проектах):
+## Keyingi ishlab chiqish chegarasi
 
-- **`@ManyToOne(fetch = EAGER)`** на всех связях (специально выбрано вместо `LAZY`, чтобы не
-  ловить `LazyInitializationException` в коде бота, который работает вне HTTP-запроса — Spring'а
-  `open-in-view` там не помогает). При таком объёме данных это просто чуть больше JOIN'ов на
-  запрос, не проблема; на больших выборках (тысячи задач в одном списке) стоило бы явно
-  проектировать выборки под конкретные экраны (`@EntityGraph` / DTO-проекции) вместо связей по
-  умолчанию.
-- **Планировщик дедлайнов проходит по *всем* активным задачам** каждые 10 минут
-  (`taskRepository.findByStatusNotIn(...)`), а не запрашивает только те, что близки к триггеру.
-  При 5000 активных задачах это одна быстрая выборка в память раз в 10 минут — незаметно; при
-  50 000+ стоило бы сузить запрос по диапазону дедлайнов на уровне SQL.
-- **In-memory `ChatSession`** (состояние пошагового диалога в боте) на инстанс — при единственном
-  инстансе (как сейчас) это нормально; при горизонтальном масштабировании (несколько инстансов
-  бота за балансировщиком) потребовался бы вынос сессии в Redis/БД, т.к. `long polling`/`webhook`
-  не гарантируют одному чату один и тот же инстанс.
-- Ограничение хостинга (Render free) — 512 МБ RAM, а не архитектуры: одного экземпляра Postgres +
-  один Spring-процесс с запасом хватает на заявленный объём.
-
-## Возможное развитие с ИИ-агентом
-
-Позиция — AI Automation Engineer, поэтому логично отметить, куда в этой архитектуре естественно
-встраивается ИИ-агент (сверх того, что уже сделано — сам код на 90%+ написан с Claude в Claude
-Code):
-
-- **Автосоставление задач из голосовых/текстовых сообщений в Telegram.** Сотрудник надиктовывает
-  «нужно сделать лендинг для акции до пятницы» одним сообщением — агент (LLM с function calling
-  поверх уже существующих `ProjectService`/`TaskService`) сам достаёт название, дедлайн (тот же
-  `DeadlineParser`, только вызванный из LLM-инструмента, а не из диалога) и предлагает исполнителя
-  по загрузке, вместо пошагового диалога `/newtask`.
-  Пример живой реализации похожего сценария — https://github.com/MyOrmonjonov/TaskApp
-  (Telegram Mini App с интеграцией нескольких LLM-провайдеров).
-- **Еженедельная сводка для директора.** Агент раз в неделю читает `StatusHistory` +
-  просроченные задачи и формирует не таблицу, а связный текст: что рискует не успеть и почему
-  (по истории переносов срока), у кого перегруз (число активных задач на исполнителя).
-- **Умная подсказка дедлайна при создании задачи.** На основе `StatusHistory` по похожим
-  задачам (тот же исполнитель/тип работы) агент предлагает реалистичный срок вместо того, чтобы
-  сотрудник называл его "на глаз".
-- **Автоклассификация причин отмены/просрочки.** Комментарии при отмене (`DomainException`
-  `error.status.cancelReasonRequired` уже требует их) и ответы на 24-часовое напоминание — готовый
-  корпус текста для кластеризации: агент раз в месяц выделяет повторяющиеся причины срывов сроков
-  (не «ИИ ради ИИ», а конкретный вход/выход поверх уже собираемых данных).
-
-Общий принцип: агент не заменяет существующие `ProjectService`/`TaskService`/`Messages`, а
-вызывает их как инструменты — вся валидация (дедлайн-иерархия, права доступа, обязательные
-вложения) уже сосредоточена в сервисном слое и одинаково защищает от бота, дашборда, Mini App и
-будущего ИИ-агента.
-
-## Использование ИИ
-
-Проект написан с активным использованием Claude (Anthropic) как ассистента в Claude Code — от
-проектирования архитектуры до самого кода, шаблонов и деплоя. Каждое архитектурное решение
-(модель данных, разграничение доступа, алгоритм пересчёта статусов, обработка дедлайнов,
-i18n-механизм, выбор между polling/webhook) осознанно проверялось и объясняется в этом README —
-готов разобрать и обосновать любую часть кода на защите.
-
-## Деплой
-
-Продакшен — **Render** (`render.yaml`, Blueprint: веб-сервис из `Dockerfile` + бесплатный
-Postgres). Изначально пробовали Railway, но триал аккаунта оказался исчерпан и требовал
-привязки платного плана — переключились на Render. Автодеплой включён (push в `main` →
-пересборка). Обязательные переменные окружения на сервисе: `TELEGRAM_BOT_TOKEN`,
-`TELEGRAM_BOT_USERNAME`, `BOOTSTRAP_DIRECTOR_TELEGRAM_ID` — заданы вручную в Render Dashboard
-(отмечены `sync: false` в `render.yaml`, т.к. это секреты). `PGHOST/PGPORT/...` подставляются
-автоматически из связанной базы, `PUBLIC_BASE_URL`/`MINIAPP_BASE_URL` — из `RENDER_EXTERNAL_URL`.
+Bu commit 1-bosqich backend poydevori va 2-bosqich vazifa API’sining boshlang‘ich qismini beradi. React Mini App, invitation API, checklist/fayl/izohlar, Telegram guruh sinxronlash, scheduler bildirishnomalari va WebSocket hodisalari keyingi modullarda qo‘shiladi.

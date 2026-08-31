@@ -1,0 +1,40 @@
+# Runs on a SEPARATE box from the main TaskApp deployment (the AWS EC2 instance in compose.yml at
+# the repo root) - meant for a free-tier ARM server (e.g. Oracle Cloud "Always Free" Ampere A1,
+# 2 OCPU / 12GB RAM) where we self-host speech-to-text + a small extraction LLM instead of paying
+# for/rate-limiting on Gemini. Both services expose OpenAI-compatible REST APIs that TaskApp's
+# backend talks to via SELFHOSTED_STT_BASE_URL / SELFHOSTED_LLM_BASE_URL (see ../compose.yml and
+# uz.taskapp.voice.SelfHostedClient) - nothing here depends on the rest of the TaskApp stack.
+#
+# Both images are official multi-arch builds (linux/amd64 + linux/arm64), so this also works
+# unmodified on an x86 box if the free ARM capacity isn't available in your region.
+
+services:
+  faster-whisper:
+    image: fedirz/faster-whisper-server:latest-cpu
+    restart: unless-stopped
+    environment:
+      WHISPER_MODEL: ${SELFHOSTED_STT_MODEL:-Systran/faster-whisper-small}
+      API_KEY: ${SELFHOSTED_API_KEY:-}
+    ports:
+      - "8000:8000"
+    volumes:
+      - whisper_models:/root/.cache/huggingface
+
+  llama-server:
+    image: ghcr.io/ggml-org/llama.cpp:server
+    restart: unless-stopped
+    command: >
+      -hf Qwen/Qwen2.5-3B-Instruct-GGUF:Q4_K_M
+      --host 0.0.0.0
+      --port 8081
+      --ctx-size 4096
+      --api-key ${SELFHOSTED_API_KEY:-}
+      --jinja
+    ports:
+      - "8081:8081"
+    volumes:
+      - llama_models:/root/.cache/llama.cpp
+
+volumes:
+  whisper_models:
+  llama_models:

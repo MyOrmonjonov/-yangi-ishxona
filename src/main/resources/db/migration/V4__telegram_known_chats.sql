@@ -1,0 +1,6 @@
+CREATE TABLE telegram_known_chats (
+    chat_id BIGINT PRIMARY KEY,
+    title VARCHAR(160) NOT NULL,
+    active BOOLEAN NOT NULL DEFAULT TRUE,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);

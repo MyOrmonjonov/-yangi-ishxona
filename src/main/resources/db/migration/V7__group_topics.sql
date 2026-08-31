@@ -1,0 +1,10 @@
+CREATE TABLE group_topics (
+    group_id BIGINT NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+    topic_id BIGINT NOT NULL,
+    name VARCHAR(160) NOT NULL,
+    closed BOOLEAN NOT NULL DEFAULT FALSE,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (group_id, topic_id)
+);
+
+ALTER TABLE tasks ADD COLUMN topic_id BIGINT;

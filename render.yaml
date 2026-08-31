@@ -9,16 +9,11 @@ services:
     name: yangi-ishxona
     runtime: docker
     dockerfilePath: ./Dockerfile
+    dockerContext: .
     plan: free
+    healthCheckPath: /api/health
+    autoDeployTrigger: commit
     envVars:
-      - key: TELEGRAM_BOT_TOKEN
-        sync: false
-      - key: TELEGRAM_BOT_USERNAME
-        sync: false
-      - key: BOOTSTRAP_DIRECTOR_TELEGRAM_ID
-        sync: false
-      - key: TELEGRAM_BOT_MODE
-        value: webhook
       - key: PGHOST
         fromDatabase:
           name: yangi-ishxona-db
@@ -39,3 +34,21 @@ services:
         fromDatabase:
           name: yangi-ishxona-db
           property: password
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_BOT_USERNAME
+        sync: false
+      - key: BOOTSTRAP_DIRECTOR_TELEGRAM_ID
+        sync: false
+      - key: APP_AUTH_SECRET
+        generateValue: true
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: YANDEX_API_KEY
+        sync: false
+      - key: YANDEX_FOLDER_ID
+        sync: false

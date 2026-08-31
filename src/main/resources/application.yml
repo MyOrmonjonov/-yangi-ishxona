@@ -1,0 +1,81 @@
+spring:
+  application:
+    name: task-app
+  datasource:
+    url: ${DATABASE_URL:jdbc:postgresql://${PGHOST:localhost}:${PGPORT:5432}/${PGDATABASE:task_app}}
+    username: ${DATABASE_USERNAME:${PGUSER:postgres}}
+    password: ${DATABASE_PASSWORD:${PGPASSWORD:postgres}}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+  flyway:
+    enabled: true
+  servlet:
+    multipart:
+      max-file-size: 25MB
+      max-request-size: 30MB
+  jackson:
+    default-property-inclusion: non_null
+
+server:
+  port: ${PORT:${SERVER_PORT:8080}}
+  forward-headers-strategy: framework
+
+telegram:
+  bot-token: ${TELEGRAM_BOT_TOKEN:}
+  bot-username: ${TELEGRAM_BOT_USERNAME:TaskAppBot}
+  mini-app-url: ${TELEGRAM_MINI_APP_URL:${RENDER_EXTERNAL_URL:http://localhost:5173}}
+  init-data-max-age: ${TELEGRAM_INIT_DATA_MAX_AGE:PT24H}
+
+app:
+  auth-secret: ${APP_AUTH_SECRET:}
+  access-token-ttl: ${APP_ACCESS_TOKEN_TTL:P7D}
+  upload-directory: ${UPLOAD_DIRECTORY:./data/uploads}
+  bootstrap-owner-telegram-id: ${BOOTSTRAP_OWNER_TELEGRAM_ID:${BOOTSTRAP_DIRECTOR_TELEGRAM_ID:0}}
+
+gemini:
+  api-key: ${GEMINI_API_KEY:}
+  model: ${GEMINI_MODEL:gemini-2.5-flash-lite}
+  base-url: ${GEMINI_BASE_URL:https://generativelanguage.googleapis.com/v1beta/models}
+  request-timeout: ${GEMINI_REQUEST_TIMEOUT:PT20S}
+
+openrouter:
+  api-key: ${OPENROUTER_API_KEY:}
+  base-url: ${OPENROUTER_BASE_URL:https://openrouter.ai/api/v1}
+  transcription-model: ${OPENROUTER_TRANSCRIPTION_MODEL:openai/whisper-1}
+  extraction-model: ${OPENROUTER_EXTRACTION_MODEL:openai/gpt-4o-mini}
+  request-timeout: ${OPENROUTER_REQUEST_TIMEOUT:PT20S}
+
+groq:
+  api-key: ${GROQ_API_KEY:}
+  base-url: ${GROQ_BASE_URL:https://api.groq.com/openai/v1}
+  transcription-model: ${GROQ_TRANSCRIPTION_MODEL:whisper-large-v3}
+  extraction-model: ${GROQ_EXTRACTION_MODEL:openai/gpt-oss-20b}
+  request-timeout: ${GROQ_REQUEST_TIMEOUT:PT20S}
+
+yandex:
+  api-key: ${YANDEX_API_KEY:}
+  folder-id: ${YANDEX_FOLDER_ID:}
+  base-url: ${YANDEX_BASE_URL:https://stt.api.cloud.yandex.net/speech/v1/stt:recognize}
+  language: ${YANDEX_LANGUAGE:uz-UZ}
+  request-timeout: ${YANDEX_REQUEST_TIMEOUT:PT20S}
+
+selfhosted:
+  stt-base-url: ${SELFHOSTED_STT_BASE_URL:}
+  llm-base-url: ${SELFHOSTED_LLM_BASE_URL:}
+  stt-model: ${SELFHOSTED_STT_MODEL:Systran/faster-whisper-small}
+  llm-model: ${SELFHOSTED_LLM_MODEL:qwen2.5-3b-instruct}
+  api-key: ${SELFHOSTED_API_KEY:}
+  request-timeout: ${SELFHOSTED_REQUEST_TIMEOUT:PT30S}
+
+voice:
+  provider: ${VOICE_PROVIDER:gemini}
+
+logging:
+  level:
+    uz.taskapp: INFO

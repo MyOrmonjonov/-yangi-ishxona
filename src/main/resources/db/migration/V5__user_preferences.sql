@@ -1,0 +1,4 @@
+ALTER TABLE users
+    ADD COLUMN ui_language VARCHAR(8) NOT NULL DEFAULT 'uz',
+    ADD COLUMN theme VARCHAR(10) NOT NULL DEFAULT 'system',
+    ADD COLUMN reminders_enabled BOOLEAN NOT NULL DEFAULT TRUE;
