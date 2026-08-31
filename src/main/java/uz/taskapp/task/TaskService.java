@@ -24,7 +24,6 @@ import uz.taskapp.workspace.WorkspaceMemberRepository;
 import uz.taskapp.workspace.WorkspaceMemberEntity;
 import uz.taskapp.realtime.WorkspaceBroadcastService;
 import uz.taskapp.telegram.TelegramTaskNotificationService;
-import uz.taskapp.voice.VoiceDraftService;
 
 import java.io.IOException;
 import java.sql.Timestamp;
@@ -66,7 +65,6 @@ public class TaskService {
     private final JdbcTemplate jdbcTemplate;
     private final TelegramTaskNotificationService taskNotificationService;
     private final WorkspaceBroadcastService broadcastService;
-    private final VoiceDraftService voiceDraftService;
     private final Path uploadDirectory;
     private final Clock clock = Clock.systemUTC();
 
@@ -81,8 +79,7 @@ public class TaskService {
                        AppProperties appProperties,
                        JdbcTemplate jdbcTemplate,
                        TelegramTaskNotificationService taskNotificationService,
-                       WorkspaceBroadcastService broadcastService,
-                       VoiceDraftService voiceDraftService) {
+                       WorkspaceBroadcastService broadcastService) {
         this.taskRepository = taskRepository;
         this.assigneeRepository = assigneeRepository;
         this.fileRepository = fileRepository;
@@ -94,7 +91,6 @@ public class TaskService {
         this.jdbcTemplate = jdbcTemplate;
         this.taskNotificationService = taskNotificationService;
         this.broadcastService = broadcastService;
-        this.voiceDraftService = voiceDraftService;
         this.uploadDirectory = Paths.get(appProperties.uploadDirectory()).toAbsolutePath().normalize();
         try {
             Files.createDirectories(this.uploadDirectory);
@@ -164,10 +160,6 @@ public class TaskService {
                             displayName(currentUserId), assigneeMentions(assigneeIds), task.getDueAt(), task.getStatus(), null,
                             telegramAttachment(task.getId()), false);
             publishAfterCommit(notification);
-        }
-        if (request.voiceDraftId() != null) {
-            Long draftId = request.voiceDraftId();
-            runAfterCommit(() -> deleteDraftPreviewMessage(draftId));
         }
         runAfterCommit(() -> broadcastService.notifyTaskChanged(request.workspaceId(), task.getId(), currentUserId));
         return toResponse(task,
@@ -874,13 +866,6 @@ public class TaskService {
             });
         } else {
             taskNotificationService.publishAsync(notification);
-        }
-    }
-
-    private void deleteDraftPreviewMessage(long draftId) {
-        VoiceDraftService.PreviewMessageLocation location = voiceDraftService.discardAndGetPreviewMessage(draftId);
-        if (location != null) {
-            taskNotificationService.deleteMessageAsync(location.chatId(), location.messageId());
         }
     }
 

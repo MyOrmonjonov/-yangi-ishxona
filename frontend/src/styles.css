@@ -1,33 +1,33 @@
 :root {
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", sans-serif;
-  color: #f7f8fb;
-  background: #05070b;
+  color: #f5f5f7;
+  background: #0a0a0c;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
-  --page-bg: #05070b;
-  --app-bg: #0f1a2c;
-  --app-bg-soft: #142135;
-  --panel: #19283a;
-  --panel-light: #223147;
-  --panel-dark: #1c1c1c;
-  --panel-dark-soft: #242424;
-  --surface-1: #1c1c1c;
-  --surface-2: #242424;
-  --surface-3: #2a2a2a;
-  --line: #34455a;
-  --line-dark: #373737;
-  --border-soft: #343434;
-  --border-strong: #3b3b3b;
-  --text: #f7f8fb;
-  --text-primary: #eeeeee;
-  --text-secondary: #999999;
-  --text-faint: #aaaaaa;
-  --text-muted2: #777777;
-  --muted: #9ba8bd;
-  --muted-dark: #858585;
-  --blue: #6d5bf0;
-  --blue-dark: #241c5e;
+  --page-bg: #0a0a0c;
+  --app-bg: #131316;
+  --app-bg-soft: #1a1a1e;
+  --panel: #1e1e22;
+  --panel-light: #26262b;
+  --panel-dark: #151518;
+  --panel-dark-soft: #1c1c20;
+  --surface-1: #1a1a1e;
+  --surface-2: #222226;
+  --surface-3: #29292e;
+  --line: #35353b;
+  --line-dark: #2c2c31;
+  --border-soft: #333338;
+  --border-strong: #45454c;
+  --text: #f5f5f7;
+  --text-primary: #ededf0;
+  --text-secondary: #9a9aa2;
+  --text-faint: #a8a8b0;
+  --text-muted2: #7c7c85;
+  --muted: #9a9aa2;
+  --muted-dark: #85858d;
+  --blue: #ff8a3d;
+  --blue-dark: #4a2c14;
   --cyan: #3cb8ee;
   --green: #27c46a;
   --danger: #ff5058;
@@ -38,57 +38,57 @@
 }
 
 :root[data-theme="light"] {
-  color: #14181f;
-  background: #f4f6fa;
-  --page-bg: #f4f6fa;
-  --app-bg: #eef1f7;
-  --app-bg-soft: #e4e9f2;
+  color: #16161a;
+  background: #f7f7f8;
+  --page-bg: #f7f7f8;
+  --app-bg: #f0f0f2;
+  --app-bg-soft: #e8e8eb;
   --panel: #ffffff;
-  --panel-light: #f5f7fb;
+  --panel-light: #f7f7f9;
   --panel-dark: #ffffff;
-  --panel-dark-soft: #f2f4f8;
+  --panel-dark-soft: #f2f2f4;
   --surface-1: #ffffff;
-  --surface-2: #f2f4f8;
-  --surface-3: #e9edf3;
-  --line: #d7deea;
-  --line-dark: #dde3ec;
-  --border-soft: #dde3ec;
-  --border-strong: #c9d2e0;
-  --text: #14181f;
-  --text-primary: #15181f;
-  --text-secondary: #5b6472;
-  --text-faint: #6b7280;
-  --text-muted2: #8a93a3;
-  --muted: #5b6472;
-  --muted-dark: #767f8c;
+  --surface-2: #f2f2f4;
+  --surface-3: #e9e9ec;
+  --line: #dcdce0;
+  --line-dark: #e2e2e6;
+  --border-soft: #e2e2e6;
+  --border-strong: #cccbd1;
+  --text: #16161a;
+  --text-primary: #17171b;
+  --text-secondary: #656570;
+  --text-faint: #75757f;
+  --text-muted2: #91919a;
+  --muted: #656570;
+  --muted-dark: #7a7a84;
   color-scheme: light;
 }
 
 @media (prefers-color-scheme: light) {
   :root:not([data-theme="dark"]):not([data-theme="light"]) {
-    color: #14181f;
-    background: #f4f6fa;
-    --page-bg: #f4f6fa;
-    --app-bg: #eef1f7;
-    --app-bg-soft: #e4e9f2;
+    color: #16161a;
+    background: #f7f7f8;
+    --page-bg: #f7f7f8;
+    --app-bg: #f0f0f2;
+    --app-bg-soft: #e8e8eb;
     --panel: #ffffff;
-    --panel-light: #f5f7fb;
+    --panel-light: #f7f7f9;
     --panel-dark: #ffffff;
-    --panel-dark-soft: #f2f4f8;
+    --panel-dark-soft: #f2f2f4;
     --surface-1: #ffffff;
-    --surface-2: #f2f4f8;
-    --surface-3: #e9edf3;
-    --line: #d7deea;
-    --line-dark: #dde3ec;
-    --border-soft: #dde3ec;
-    --border-strong: #c9d2e0;
-    --text: #14181f;
-    --text-primary: #15181f;
-    --text-secondary: #5b6472;
-    --text-faint: #6b7280;
-    --text-muted2: #8a93a3;
-    --muted: #5b6472;
-    --muted-dark: #767f8c;
+    --surface-2: #f2f2f4;
+    --surface-3: #e9e9ec;
+    --line: #dcdce0;
+    --line-dark: #e2e2e6;
+    --border-soft: #e2e2e6;
+    --border-strong: #cccbd1;
+    --text: #16161a;
+    --text-primary: #17171b;
+    --text-secondary: #656570;
+    --text-faint: #75757f;
+    --text-muted2: #91919a;
+    --muted: #656570;
+    --muted-dark: #7a7a84;
     color-scheme: light;
   }
 }
@@ -310,7 +310,7 @@ svg {
   min-height: 44px;
   padding: 0 16px;
   border: 1px solid var(--border-strong);
-  border-radius: 999px;
+  border-radius: 12px;
   background: var(--surface-2);
   color: var(--text-secondary);
   font-size: 15px;
@@ -318,8 +318,8 @@ svg {
 }
 
 .task-quick-tabs button.selected {
-  border-color: #6088ff;
-  background: #2d5be3;
+  border-color: #ffb27a;
+  background: #e0672a;
   color: #fff;
 }
 
@@ -329,7 +329,7 @@ svg {
   min-width: 24px;
   height: 24px;
   padding: 0 6px;
-  border-radius: 999px;
+  border-radius: 12px;
   background: rgba(128, 128, 128, 0.22);
   font-size: 12px;
 }
@@ -739,7 +739,7 @@ svg {
   border: 1px solid var(--border-strong);
   border-radius: 15px;
   background: var(--panel-dark);
-  color: #4b78f4;
+  color: #ff8a3d;
   text-align: left;
 }
 
@@ -942,7 +942,7 @@ svg {
   place-items: center;
   border-radius: 10px;
   background: var(--surface-2);
-  color: #4b78f4;
+  color: #ff8a3d;
 }
 
 .task-attachment-preview img {
@@ -1024,7 +1024,7 @@ svg {
 .status-options button.selected {
   border-color: #396fd4;
   background: rgba(75, 120, 244, 0.16);
-  color: #4b78f4;
+  color: #ff8a3d;
 }
 
 .status-options button strong { font-size: 18px; }
@@ -1078,7 +1078,7 @@ svg {
 }
 
 .priority-options button > svg {
-  color: #4b78f4;
+  color: #ff8a3d;
 }
 
 .priority-option-icon {
@@ -1323,7 +1323,7 @@ svg {
 
 .reminder-options button.selected {
   background: rgba(75, 120, 244, 0.16);
-  color: #4b78f4;
+  color: #ff8a3d;
 }
 
 .reminder-options strong { font-size: 16px; }
@@ -1507,7 +1507,7 @@ svg {
   border: 1px solid #4279ef;
   border-radius: 12px;
   background: rgba(75, 120, 244, 0.14);
-  color: #4b78f4;
+  color: #ff8a3d;
   font-size: 12px;
   font-weight: 850;
 }
@@ -1532,7 +1532,7 @@ svg {
 }
 
 .membership-invite-row strong {
-  color: #4b78f4;
+  color: #ff8a3d;
   font-size: 13px;
 }
 
@@ -1552,7 +1552,7 @@ svg {
   border: 1px solid #4279ef;
   border-radius: 12px;
   background: rgba(75, 120, 244, 0.14);
-  color: #4b78f4;
+  color: #ff8a3d;
   font-size: 12px;
   font-weight: 850;
 }
@@ -1719,7 +1719,7 @@ svg {
   border: 1px solid var(--border-strong);
   border-radius: 19px;
   background: var(--panel-dark);
-  color: #4b78f4;
+  color: #ff8a3d;
   text-align: left;
 }
 
@@ -2365,7 +2365,7 @@ svg {
 .deadline-presets button.active {
   border-color: #3768b9;
   background: rgba(75, 120, 244, 0.16);
-  color: #4b78f4;
+  color: #ff8a3d;
 }
 
 .time-row {
@@ -3001,7 +3001,7 @@ svg {
   min-height: 43px;
   padding: 0 14px;
   border: 1px solid var(--border-strong);
-  border-radius: 999px;
+  border-radius: 12px;
   background: var(--surface-2);
   color: var(--text-primary);
   font-size: 14px;
@@ -3210,7 +3210,7 @@ svg {
   border: 1px solid #3561bc;
   border-radius: 15px;
   background: transparent;
-  color: #4b78f4;
+  color: #ff8a3d;
   font-size: 13px;
   font-weight: 850;
   white-space: nowrap;
@@ -3791,7 +3791,7 @@ svg {
   margin-left: -6px;
   border: 2px solid var(--surface-2);
   border-radius: 50%;
-  background: #4b78f4;
+  background: #ff8a3d;
   color: #fff;
   font-size: 9px;
   font-weight: 800;
@@ -4232,7 +4232,7 @@ svg {
   height: 32px;
   padding: 0 12px;
   border: 1px solid var(--border-soft);
-  border-radius: 999px;
+  border-radius: 12px;
   color: var(--text-secondary);
   font-size: 12px;
   font-weight: 700;
@@ -4539,7 +4539,7 @@ svg {
 .desktop-modal-assignees button {
   padding: 7px 12px;
   border: 1px solid var(--border-soft);
-  border-radius: 999px;
+  border-radius: 12px;
   font-size: 12px;
   font-weight: 700;
   color: var(--text-secondary);

@@ -195,17 +195,6 @@ function isAudioAttachment(name: string, contentType?: string) {
     || /\.(ogg|oga|opus|mp3|wav|m4a|webm|aac|flac)$/i.test(name)
 }
 
-function voiceRecordingFile(blob: Blob): File {
-  const type = blob.type || 'audio/webm'
-  const ext = type.includes('ogg') ? 'ogg'
-    : type.includes('webm') ? 'webm'
-    : type.includes('mp4') || type.includes('m4a') ? 'm4a'
-    : type.includes('wav') ? 'wav'
-    : type.includes('mpeg') || type.includes('mp3') ? 'mp3'
-    : 'audio'
-  return new File([blob], `voice-message.${ext}`, { type })
-}
-
 export function showTelegramMessage(message: string) {
   const webApp = window.Telegram?.WebApp
   if (webApp?.showAlert) webApp.showAlert(message)
@@ -307,8 +296,6 @@ function App() {
   const [archivedTasks, setArchivedTasks] = useState<Task[]>([])
   const [archivedLoading, setArchivedLoading] = useState(false)
   const [workspaceMembers, setWorkspaceMembers] = useState<WorkspaceMember[]>([])
-  const [voiceAvailable, setVoiceAvailable] = useState(false)
-  const [quickVoiceOpen, setQuickVoiceOpen] = useState(false)
   const [taskFilter, setTaskFilter] = useState<TaskDashboardFilter>(defaultTaskFilter)
   const [taskGrouping, setTaskGrouping] = useState<TaskGrouping>('STATUS')
   const [taskSearch, setTaskSearch] = useState('')
@@ -333,8 +320,6 @@ function App() {
   const [preferencesSaving, setPreferencesSaving] = useState(false)
   const [activeWorkspaceId, setActiveWorkspaceId] = useState<number | null>(null)
   const latestWorkspaceIdRef = useRef<number | null>(null)
-  const [pendingVoiceDraft, setPendingVoiceDraft] = useState<{ workspaceId: number; draft: VoiceDraftResult; audioFile?: File; draftId?: string } | null>(null)
-  const [voiceDraftId, setVoiceDraftId] = useState<number | null>(null)
   const [workspaceSwitching, setWorkspaceSwitching] = useState(false)
   const [newWorkspaceName, setNewWorkspaceName] = useState('')
   const [creatingWorkspace, setCreatingWorkspace] = useState(false)
@@ -350,8 +335,6 @@ function App() {
   const [checklist, setChecklist] = useState<ChecklistItem[]>([])
   const [checklistDraft, setChecklistDraft] = useState('')
   const [attachments, setAttachments] = useState<AttachmentItem[]>([])
-  const [voiceReady, setVoiceReady] = useState<{ transcript: string; audioFile: File } | null>(null)
-  const [voiceRerecording, setVoiceRerecording] = useState(false)
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState('')
   const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null)
@@ -423,7 +406,7 @@ function App() {
         if (session.user.uiLanguage) setLang(session.user.uiLanguage)
         if (session.user.theme) setTheme(session.user.theme)
         if (session.user.remindersEnabled !== undefined) setRemindersEnabled(session.user.remindersEnabled)
-        return Promise.all([loadTasks(session), loadGroups(session), loadWorkspaceMembers(session), loadVoiceAvailability(session)])
+        return Promise.all([loadTasks(session), loadGroups(session), loadWorkspaceMembers(session)])
       })
       .catch((reason) => showTelegramMessage(reason instanceof Error ? reason.message : t('error.authFailed')))
   }, [])
@@ -453,60 +436,6 @@ function App() {
       setEditDetailsLoaded(true)
     }).catch((reason) => showTelegramMessage(reason instanceof Error ? reason.message : t('error.taskLoadFailed')))
   }, [auth])
-
-  // Opened from the Telegram bot's "Formada tekshirish va yaratish" button after a voice/text
-  // draft was created there: pick up the draft it stashed server-side and drop the user into the
-  // pre-filled create screen. In a private chat the draft id arrives as a ?voiceDraftId= query
-  // param (the button opens our URL directly); from a group it arrives via a t.me/<bot>?startapp=
-  // direct link instead, whose parameter Telegram hands us as start_param rather than in the URL.
-  useEffect(() => {
-    if (!auth) return
-    const params = new URLSearchParams(window.location.search)
-    const queryDraftId = params.get('voiceDraftId')
-    const startParam = window.Telegram?.WebApp?.initDataUnsafe?.start_param
-    const startParamDraftId = startParam?.startsWith('voice_') ? startParam.slice('voice_'.length) : undefined
-    const draftIdParam = queryDraftId ?? startParamDraftId
-    if (!draftIdParam) return
-    if (queryDraftId) {
-      params.delete('voiceDraftId')
-      const nextSearch = params.toString()
-      window.history.replaceState(null, '', window.location.pathname + (nextSearch ? `?${nextSearch}` : '') + window.location.hash)
-    }
-    void fetch(`/api/voice/drafts/pending/${draftIdParam}`, {
-      headers: { Authorization: `Bearer ${auth.accessToken}` },
-    }).then(async (response) => {
-      if (!response.ok) {
-        showTelegramMessage(response.status === 404 || response.status === 403
-          ? t('voice.error.noSpeech') : t('voice.error.transcribeFailed'))
-        return
-      }
-      const body = await response.json() as { workspaceId: number; draft: VoiceDraftResult; hasAudio?: boolean }
-      if (!body.hasAudio) {
-        setPendingVoiceDraft({ ...body, draftId: draftIdParam })
-        return
-      }
-      try {
-        const audioResponse = await fetch(`/api/voice/drafts/pending/${draftIdParam}/audio`, {
-          headers: { Authorization: `Bearer ${auth.accessToken}` },
-        })
-        const audioFile = audioResponse.ok ? voiceRecordingFile(await audioResponse.blob()) : undefined
-        setPendingVoiceDraft({ ...body, audioFile, draftId: draftIdParam })
-      } catch {
-        setPendingVoiceDraft({ ...body, draftId: draftIdParam })
-      }
-    }).catch(() => showTelegramMessage(t('common.error.network')))
-  }, [auth])
-
-  useEffect(() => {
-    if (!pendingVoiceDraft) return
-    if (pendingVoiceDraft.workspaceId !== activeWorkspaceId) {
-      void switchWorkspace(pendingVoiceDraft.workspaceId)
-      return
-    }
-    handleQuickVoiceDraft(pendingVoiceDraft.draft, pendingVoiceDraft.audioFile, pendingVoiceDraft.draftId)
-    setPendingVoiceDraft(null)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pendingVoiceDraft, activeWorkspaceId, groups])
 
   useEffect(() => {
     const root = document.documentElement
@@ -772,20 +701,6 @@ function App() {
     if (latestWorkspaceIdRef.current === null || workspace.id === latestWorkspaceIdRef.current) setWorkspaceMembers(available)
     return available
   }
-
-  async function loadVoiceAvailability(session: AuthResponse) {
-    try {
-      const response = await fetch('/api/voice/availability', {
-        headers: { Authorization: `Bearer ${session.accessToken}` },
-      })
-      if (!response.ok) return
-      const result = (await response.json()) as { available: boolean }
-      setVoiceAvailable(result.available)
-    } catch {
-      setVoiceAvailable(false)
-    }
-  }
-
 
   function addBotToGroup(group: LinkedGroup) {
     if (!group.botUsername) {
@@ -1221,70 +1136,8 @@ function App() {
     setReminderMinutes(undefined)
     setChecklist([])
     setAttachments([])
-    setVoiceReady(null)
-    setVoiceRerecording(false)
-    setVoiceDraftId(null)
     setMoreOpen(false)
     setFormError('')
-  }
-
-  function applyVoiceDraft(draft: VoiceDraftResult, audioFile?: File) {
-    setTitle((current) => current || draft.title)
-    setDescription((current) => (current ? `${current}\n${draft.transcript}` : draft.transcript))
-    if (draft.dueAt) setDeadline(draft.dueAt)
-    if (draft.reminderMinutes !== undefined && (draft.dueAt || deadline)) setReminderMinutes(draft.reminderMinutes)
-    let targetsGroup = visibility === 'GROUP'
-    if (draft.groupId) {
-      const matchedGroup = groups.find((group) => group.id === draft.groupId)
-      if (matchedGroup) {
-        setVisibility('GROUP')
-        setSelectedGroupId(matchedGroup.id)
-        targetsGroup = true
-        if (draft.topicId) setSelectedTopicId(draft.topicId)
-      }
-    }
-    if (targetsGroup && draft.assigneeIds.length) {
-      setAssigneeIds((current) => Array.from(new Set([...current, ...draft.assigneeIds])))
-    }
-    if (draft.unmatchedAssigneeNames.length) {
-      showTelegramMessage(t('voice.unmatchedAssignees', { names: draft.unmatchedAssigneeNames.join(', ') }))
-    }
-    if (draft.unmatchedGroupName) {
-      showTelegramMessage(t('voice.unmatchedGroup', { name: draft.unmatchedGroupName }))
-    }
-    if (audioFile) {
-      setAttachments((current) => [...current, { id: Date.now(), name: audioFile.name, file: audioFile }])
-      setVoiceReady({ transcript: draft.transcript, audioFile })
-    }
-    setVoiceRerecording(false)
-  }
-
-  function removeVoiceAudio(file: File) {
-    setAttachments((current) => current.filter((item) => item.file !== file))
-  }
-
-  function sayMoreVoice() {
-    setVoiceRerecording(true)
-  }
-
-  function rerecordVoice() {
-    if (voiceReady) removeVoiceAudio(voiceReady.audioFile)
-    setVoiceReady(null)
-    setVoiceRerecording(true)
-  }
-
-  function removeVoiceReady() {
-    if (voiceReady) removeVoiceAudio(voiceReady.audioFile)
-    setVoiceReady(null)
-    setVoiceRerecording(false)
-  }
-
-  function handleQuickVoiceDraft(draft: VoiceDraftResult, audioFile?: File, draftId?: string) {
-    resetForm()
-    applyVoiceDraft(draft, audioFile)
-    setVoiceDraftId(draftId ? Number(draftId) : null)
-    setQuickVoiceOpen(false)
-    goTo('create')
   }
 
   async function createTask(event: FormEvent) {
@@ -1318,7 +1171,6 @@ function App() {
           reminderMinutes,
           assigneeIds: visibility === 'GROUP' ? assigneeIds : [auth.user.id],
           checklist: checklist.map((item) => ({ text: item.text, done: item.done })),
-          voiceDraftId: voiceDraftId ?? undefined,
         }
         let response: Response
         if (attachments.length === 0) {
@@ -1528,7 +1380,6 @@ function App() {
           groups={groups}
           workspaceMembers={workspaceMembers}
           activeWorkspaceId={activeWorkspaceId}
-          voiceAvailable={voiceAvailable}
           workspaceSwitching={workspaceSwitching}
           newWorkspaceName={newWorkspaceName}
           creatingWorkspace={creatingWorkspace}
@@ -1595,17 +1446,6 @@ function App() {
             onQuickView={(view) => setTaskFilter((current) => ({ ...current, view }))}
             onFilter={() => setSheet('task-filter')}
             onGrouping={() => setSheet('task-group')}
-            voiceAvailable={voiceAvailable && !!activeWorkspace(auth)?.id && !!auth?.accessToken}
-            onVoiceQuickCreate={() => setQuickVoiceOpen(true)}
-          />
-        )}
-
-        {quickVoiceOpen && activeWorkspace(auth)?.id && auth?.accessToken && (
-          <VoiceQuickCreateModal
-            workspaceId={activeWorkspace(auth)!.id}
-            accessToken={auth.accessToken}
-            onDraft={handleQuickVoiceDraft}
-            onClose={() => setQuickVoiceOpen(false)}
           />
         )}
 
@@ -1630,15 +1470,6 @@ function App() {
             galleryRef={galleryRef}
             cameraRef={cameraRef}
             fileRef={fileRef}
-            voiceAvailable={voiceAvailable}
-            workspaceId={activeWorkspace(auth)?.id}
-            accessToken={auth?.accessToken}
-            onVoiceDraft={applyVoiceDraft}
-            voiceReady={voiceReady}
-            voiceRerecording={voiceRerecording}
-            onVoiceSayMore={sayMoreVoice}
-            onVoiceRerecord={rerecordVoice}
-            onVoiceRemove={removeVoiceReady}
             onTitle={setTitle}
             onDescription={setDescription}
             onStatus={() => setSheet('create-status')}
@@ -2071,8 +1902,6 @@ function TasksScreen({
   onQuickView,
   onFilter,
   onGrouping,
-  voiceAvailable,
-  onVoiceQuickCreate,
 }: {
   tasks: Task[]
   allTasks: Task[]
@@ -2092,8 +1921,6 @@ function TasksScreen({
   onQuickView: (value: TaskView) => void
   onFilter: () => void
   onGrouping: () => void
-  voiceAvailable?: boolean
-  onVoiceQuickCreate?: () => void
 }) {
   const { t } = useI18n()
   const quickViews: TaskView[] = ['ACTIVE', 'MINE', 'TODAY', 'OVERDUE']
@@ -2143,7 +1970,6 @@ function TasksScreen({
             <button className="primary-light" type="button" onClick={onCreate}>
               <Plus size={25} /> {t('tasks.empty.cta')}
             </button>
-            {voiceAvailable && onVoiceQuickCreate && <VoiceQuickCreateFab onClick={onVoiceQuickCreate} />}
           </div>
         </section>
       ) : tasks.length === 0 ? (
@@ -2158,7 +1984,6 @@ function TasksScreen({
             <div><span>{t('tasks.list.heading')}</span><strong>{t('tasks.list.count', { count: tasks.length })}</strong></div>
             <div className="task-list-heading-actions">
               <button type="button" onClick={onCreate}><Plus size={20} /> {t('tasks.list.new')}</button>
-              {voiceAvailable && onVoiceQuickCreate && <VoiceQuickCreateFab onClick={onVoiceQuickCreate} />}
             </div>
           </div>
           {groups.map((group) => (
@@ -2613,15 +2438,6 @@ interface CreateScreenProps {
   galleryRef: React.RefObject<HTMLInputElement | null>
   cameraRef: React.RefObject<HTMLInputElement | null>
   fileRef: React.RefObject<HTMLInputElement | null>
-  voiceAvailable: boolean
-  workspaceId?: number
-  accessToken?: string
-  onVoiceDraft: (draft: VoiceDraftResult, audioFile?: File) => void
-  voiceReady: { transcript: string; audioFile: File } | null
-  voiceRerecording: boolean
-  onVoiceSayMore: () => void
-  onVoiceRerecord: () => void
-  onVoiceRemove: () => void
   onTitle: (value: string) => void
   onDescription: (value: string) => void
   onStatus: () => void
@@ -2656,28 +2472,6 @@ function CreateScreen(props: CreateScreenProps) {
             placeholder={t('create.namePlaceholder')}
           />
         </label>
-
-        {props.voiceAvailable && props.workspaceId && props.accessToken && (
-          props.voiceReady
-            ? (
-              <VoiceReadyCard
-                transcript={props.voiceReady.transcript}
-                audioFile={props.voiceReady.audioFile}
-                onSayMore={props.onVoiceSayMore}
-                onRerecord={props.onVoiceRerecord}
-                onRemove={props.onVoiceRemove}
-              />
-            )
-            : (
-              <VoiceTaskRecorder
-                workspaceId={props.workspaceId}
-                accessToken={props.accessToken}
-                hasExistingDraft={!!props.title.trim() || !!props.description.trim()}
-                autoStart={props.voiceRerecording}
-                onDraft={props.onVoiceDraft}
-              />
-            )
-        )}
 
         <button className="create-row deadline-row" type="button" onClick={props.onDeadline}>
           <span className="row-icon"><CalendarClock size={25} /></span>
@@ -2921,392 +2715,6 @@ function AttachmentViewer({ url, name, image, audio, onClose }: {
         : audio
           ? <div className="attachment-viewer-audio"><Mic size={44} /><strong>{name}</strong><audio controls src={url} /></div>
           : <a href={url} target="_blank" rel="noreferrer"><FileText size={44} /><strong>{name}</strong><span>{t('attachment.openFile')}</span></a>}
-    </div>
-  )
-}
-
-export interface VoiceDraftResult {
-  transcript: string
-  title: string
-  description: string
-  dueAt?: string
-  assigneeIds: number[]
-  unmatchedAssigneeNames: string[]
-  groupId?: number
-  unmatchedGroupName?: string
-  reminderMinutes?: number
-  topicId?: number
-}
-
-const VOICE_MAX_SECONDS = 90
-
-const VOICE_ERROR_KEYS: Record<string, string> = {
-  GEMINI_NOT_CONFIGURED: 'voice.error.notConfigured',
-  VOICE_TRANSCRIBE_FAILED: 'voice.error.transcribeFailed',
-  VOICE_DRAFT_PARSE_FAILED: 'voice.error.parseFailed',
-  VOICE_NO_SPEECH_DETECTED: 'voice.error.noSpeech',
-  VOICE_AUDIO_INVALID: 'voice.error.audioInvalid',
-  WORKSPACE_ACCESS_DENIED: 'voice.error.transcribeFailed',
-}
-
-function encodeWavBlob(buffer: AudioBuffer): Blob {
-  const sampleRate = buffer.sampleRate
-  const samples = buffer.getChannelData(0)
-  const dataSize = samples.length * 2
-  const arrayBuffer = new ArrayBuffer(44 + dataSize)
-  const view = new DataView(arrayBuffer)
-
-  const writeString = (offset: number, text: string) => {
-    for (let i = 0; i < text.length; i += 1) view.setUint8(offset + i, text.charCodeAt(i))
-  }
-
-  writeString(0, 'RIFF')
-  view.setUint32(4, 36 + dataSize, true)
-  writeString(8, 'WAVE')
-  writeString(12, 'fmt ')
-  view.setUint32(16, 16, true)
-  view.setUint16(20, 1, true)
-  view.setUint16(22, 1, true)
-  view.setUint32(24, sampleRate, true)
-  view.setUint32(28, sampleRate * 2, true)
-  view.setUint16(32, 2, true)
-  view.setUint16(34, 16, true)
-  writeString(36, 'data')
-  view.setUint32(40, dataSize, true)
-
-  let offset = 44
-  for (let i = 0; i < samples.length; i += 1) {
-    const sample = Math.max(-1, Math.min(1, samples[i]))
-    view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7fff, true)
-    offset += 2
-  }
-
-  return new Blob([arrayBuffer], { type: 'audio/wav' })
-}
-
-function decodeAudioData(audioContext: AudioContext, arrayBuffer: ArrayBuffer): Promise<AudioBuffer> {
-  // Safari has a long-standing bug where the promise form of decodeAudioData rejects for audio
-  // it just recorded via MediaRecorder, while the legacy callback form decodes the exact same
-  // buffer successfully - fall back to it instead of failing the whole recording outright.
-  return audioContext.decodeAudioData(arrayBuffer.slice(0)).catch(
-    () => new Promise<AudioBuffer>((resolve, reject) => {
-      audioContext.decodeAudioData(arrayBuffer.slice(0), resolve, reject)
-    }),
-  )
-}
-
-async function blobToWav(blob: Blob): Promise<Blob> {
-  const arrayBuffer = await blob.arrayBuffer()
-  const AudioContextCtor = window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
-  const audioContext = new AudioContextCtor()
-  try {
-    const audioBuffer = await decodeAudioData(audioContext, arrayBuffer)
-    return encodeWavBlob(audioBuffer)
-  } finally {
-    void audioContext.close()
-  }
-}
-
-function formatVoiceTimer(seconds: number) {
-  return `${Math.floor(seconds / 60)}:${pad(seconds % 60)}`
-}
-
-export function VoiceTaskRecorder({ workspaceId, accessToken, hasExistingDraft, autoStart, onDraft }: {
-  workspaceId: number
-  accessToken: string
-  hasExistingDraft: boolean
-  autoStart?: boolean
-  onDraft: (draft: VoiceDraftResult, audioFile?: File) => void
-}) {
-  const { t } = useI18n()
-  type VoicePhase = 'idle' | 'requesting' | 'recording' | 'recorded' | 'analyzing'
-  const [phase, setPhase] = useState<VoicePhase>(autoStart ? 'requesting' : 'idle')
-  const [elapsedSeconds, setElapsedSeconds] = useState(0)
-  const [recordedBlob, setRecordedBlob] = useState<Blob | null>(null)
-  const [objectUrl, setObjectUrl] = useState<string>()
-  const [error, setError] = useState('')
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
-  const streamRef = useRef<MediaStream | null>(null)
-  const chunksRef = useRef<Blob[]>([])
-  const timerRef = useRef<number | undefined>(undefined)
-  const objectUrlRef = useRef<string | undefined>(undefined)
-
-  useEffect(() => {
-    objectUrlRef.current = objectUrl
-  }, [objectUrl])
-
-  useEffect(() => {
-    if (autoStart) void startRecording()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  useEffect(() => () => {
-    if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current)
-    streamRef.current?.getTracks().forEach((track) => track.stop())
-    window.clearInterval(timerRef.current)
-  }, [])
-
-  if (typeof window === 'undefined' || typeof window.MediaRecorder === 'undefined') return null
-
-  async function startRecording() {
-    setError('')
-    setPhase('requesting')
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-      streamRef.current = stream
-      const recorder = new MediaRecorder(stream)
-      chunksRef.current = []
-      recorder.ondataavailable = (event) => { if (event.data.size > 0) chunksRef.current.push(event.data) }
-      recorder.onstop = () => {
-        const blob = new Blob(chunksRef.current, { type: recorder.mimeType || 'audio/webm' })
-        setRecordedBlob(blob)
-        setObjectUrl(URL.createObjectURL(blob))
-        stream.getTracks().forEach((track) => track.stop())
-        window.clearInterval(timerRef.current)
-        void analyze(blob)
-      }
-      mediaRecorderRef.current = recorder
-      recorder.start()
-      setElapsedSeconds(0)
-      timerRef.current = window.setInterval(() => {
-        setElapsedSeconds((current) => {
-          const next = current + 1
-          if (next >= VOICE_MAX_SECONDS) mediaRecorderRef.current?.stop()
-          return next
-        })
-      }, 1000)
-      setPhase('recording')
-    } catch {
-      setError(t('voice.permissionDenied'))
-      setPhase('idle')
-    }
-  }
-
-  function stopRecording() {
-    mediaRecorderRef.current?.stop()
-  }
-
-  function discard() {
-    if (objectUrl) URL.revokeObjectURL(objectUrl)
-    setObjectUrl(undefined)
-    setRecordedBlob(null)
-    setPhase('idle')
-  }
-
-  function rerecord() {
-    discard()
-    void startRecording()
-  }
-
-  async function analyze(blob: Blob) {
-    setPhase('analyzing')
-    setError('')
-    let wavBlob: Blob
-    try {
-      wavBlob = await blobToWav(blob)
-    } catch (encodeError) {
-      console.error('Voice recording could not be decoded/encoded to WAV', encodeError)
-      setError(t('voice.error.encodeFailed'))
-      setPhase('recorded')
-      return
-    }
-    try {
-      const formData = new FormData()
-      formData.append('audio', wavBlob, 'voice.wav')
-      formData.append('workspaceId', String(workspaceId))
-      const response = await fetch('/api/voice/drafts', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${accessToken}` },
-        body: formData,
-      })
-      if (!response.ok) {
-        const body = await response.json().catch(() => null) as { code?: string } | null
-        const key = body?.code ? VOICE_ERROR_KEYS[body.code] : undefined
-        setError(key ? t(key) : t('common.error.network'))
-        if (body?.code === 'VOICE_NO_SPEECH_DETECTED' || body?.code === 'VOICE_AUDIO_INVALID') {
-          discard()
-        } else {
-          setPhase('recorded')
-        }
-        return
-      }
-      const draft = await response.json() as VoiceDraftResult
-      const audioFile = voiceRecordingFile(blob)
-      if (objectUrl) URL.revokeObjectURL(objectUrl)
-      setObjectUrl(undefined)
-      setRecordedBlob(null)
-      setPhase('idle')
-      onDraft(draft, audioFile)
-    } catch {
-      setError(t('common.error.network'))
-      setPhase('recorded')
-    }
-  }
-
-  return (
-    <div className="voice-recorder">
-      {phase === 'idle' && (
-        <button type="button" className="voice-recorder-idle" onClick={() => void startRecording()}>
-          <span className="row-icon"><Mic size={22} /></span>
-          <strong>{hasExistingDraft ? t('voice.recordMore') : t('voice.record')}</strong>
-        </button>
-      )}
-      {phase === 'requesting' && (
-        <div className="voice-recorder-status">{t('voice.recording')}</div>
-      )}
-      {phase === 'recording' && (
-        <div className="voice-recorder-recording">
-          <span className="voice-recorder-dot" />
-          <strong>{t('voice.recording')}</strong>
-          <span className="voice-recorder-timer">{formatVoiceTimer(elapsedSeconds)}</span>
-          <button type="button" className="voice-recorder-stop" onClick={stopRecording} aria-label={t('voice.stop')}>
-            <Square size={16} />
-          </button>
-        </div>
-      )}
-      {phase === 'recorded' && objectUrl && (
-        <div className="voice-recorder-preview">
-          <audio controls src={objectUrl} />
-          <div className="voice-recorder-actions">
-            <button type="button" onClick={discard}>{t('voice.discard')}</button>
-            <button type="button" onClick={rerecord}><RotateCcw size={15} />{t('voice.rerecord')}</button>
-            <button type="button" className="voice-recorder-analyze" onClick={() => recordedBlob && void analyze(recordedBlob)}>{t('voice.retry')}</button>
-          </div>
-        </div>
-      )}
-      {phase === 'analyzing' && (
-        <div className="voice-recorder-status">{t('voice.analyzing')}</div>
-      )}
-      {error && <div className="voice-recorder-error">{error}</div>}
-    </div>
-  )
-}
-
-export function VoiceReadyCard({ transcript, audioFile, onSayMore, onRerecord, onRemove }: {
-  transcript: string
-  audioFile: File
-  onSayMore: () => void
-  onRerecord: () => void
-  onRemove: () => void
-}) {
-  const { t } = useI18n()
-  const [objectUrl, setObjectUrl] = useState<string>()
-  const [duration, setDuration] = useState(0)
-  const [currentTime, setCurrentTime] = useState(0)
-  const [playing, setPlaying] = useState(false)
-  const [muted, setMuted] = useState(false)
-  const audioRef = useRef<HTMLAudioElement | null>(null)
-
-  useEffect(() => {
-    const url = URL.createObjectURL(audioFile)
-    setObjectUrl(url)
-    return () => URL.revokeObjectURL(url)
-  }, [audioFile])
-
-  function togglePlay() {
-    const audio = audioRef.current
-    if (!audio) return
-    if (audio.paused) void audio.play()
-    else audio.pause()
-  }
-
-  function toggleMute() {
-    const audio = audioRef.current
-    if (!audio) return
-    audio.muted = !audio.muted
-    setMuted(audio.muted)
-  }
-
-  return (
-    <div className="voice-ready-card">
-      <div className="voice-ready-header">
-        <span className="voice-ready-icon"><Mic size={18} /></span>
-        <div className="voice-ready-heading">
-          <strong>{t('voice.ready.title')}</strong>
-          <small>{t('voice.ready.subtitle')}</small>
-        </div>
-      </div>
-
-      {objectUrl && (
-        <div className="voice-ready-player">
-          <button type="button" className="voice-ready-play" onClick={togglePlay} aria-label={t('voice.ready.title')}>
-            {playing ? <Square size={13} /> : <Play size={13} />}
-          </button>
-          <input
-            className="voice-ready-seek"
-            type="range"
-            min={0}
-            max={duration || 0}
-            step={0.1}
-            value={Math.min(currentTime, duration)}
-            onChange={(event) => {
-              const audio = audioRef.current
-              const value = Number(event.target.value)
-              if (audio) audio.currentTime = value
-              setCurrentTime(value)
-            }}
-          />
-          <button type="button" className="voice-ready-mute" onClick={toggleMute} aria-label={t('voice.ready.title')}>
-            {muted ? <VolumeX size={14} /> : <Volume2 size={14} />}
-          </button>
-          <span className="voice-ready-time">{formatVoiceTimer(Math.round(currentTime))}</span>
-          <audio
-            ref={audioRef}
-            src={objectUrl}
-            onLoadedMetadata={(event) => setDuration(event.currentTarget.duration || 0)}
-            onTimeUpdate={(event) => setCurrentTime(event.currentTarget.currentTime)}
-            onPlay={() => setPlaying(true)}
-            onPause={() => setPlaying(false)}
-            onEnded={() => setPlaying(false)}
-          />
-        </div>
-      )}
-
-      <div className="voice-ready-transcript-label">{t('voice.ready.transcriptLabel')}</div>
-      <div className="voice-ready-transcript-box">{transcript}</div>
-      <small className="voice-ready-transcript-hint">{t('voice.ready.transcriptHint')}</small>
-
-      <div className="voice-recorder-actions">
-        <button type="button" onClick={onSayMore}><Plus size={15} />{t('voice.ready.sayMore')}</button>
-        <button type="button" onClick={onRerecord}><RotateCcw size={15} />{t('voice.rerecord')}</button>
-        <button type="button" onClick={onRemove}><Trash2 size={15} />{t('voice.ready.removeAudio')}</button>
-      </div>
-    </div>
-  )
-}
-
-export function VoiceQuickCreateFab({ onClick }: { onClick: () => void }) {
-  const { t } = useI18n()
-  return (
-    <button type="button" className="voice-quick-fab" aria-label={t('voice.record')} onClick={onClick}>
-      <Mic size={20} />
-    </button>
-  )
-}
-
-export function VoiceQuickCreateModal({ workspaceId, accessToken, onDraft, onClose }: {
-  workspaceId: number
-  accessToken: string
-  onDraft: (draft: VoiceDraftResult, audioFile?: File) => void
-  onClose: () => void
-}) {
-  const { t } = useI18n()
-  return (
-    <div className="voice-quick-modal-backdrop" onMouseDown={(event) => {
-      if (event.currentTarget === event.target) onClose()
-    }}>
-      <div className="voice-quick-modal">
-        <button type="button" className="voice-quick-modal-close" aria-label={t('common.close')} onClick={onClose}>
-          <X size={20} />
-        </button>
-        <VoiceTaskRecorder
-          workspaceId={workspaceId}
-          accessToken={accessToken}
-          hasExistingDraft={false}
-          autoStart
-          onDraft={onDraft}
-        />
-      </div>
     </div>
   )
 }

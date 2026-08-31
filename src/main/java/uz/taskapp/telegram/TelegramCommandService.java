@@ -12,8 +12,6 @@ import uz.taskapp.task.TaskService;
 import uz.taskapp.task.TaskStatus;
 import uz.taskapp.user.UserEntity;
 import uz.taskapp.user.UserRepository;
-import uz.taskapp.voice.VoiceDraftResponse;
-import uz.taskapp.voice.VoiceDraftService;
 import uz.taskapp.workspace.WorkspaceMemberEntity;
 import uz.taskapp.workspace.WorkspaceMemberRepository;
 
@@ -21,14 +19,12 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.StreamSupport;
 
 /**
- * Handles the Telegram bot's text slash-commands (/task, /my, /due, /done, /members, /help).
- * Reuses TaskService for all task operations and VoiceDraftService's LLM-based extraction
- * pipeline (built for voice, generalized to accept plain text) for /task's free-text parsing.
+ * Handles the Telegram bot's text slash-commands (/my, /due, /done, /members, /help).
+ * Reuses TaskService for all task operations.
  */
 @Component
 public class TelegramCommandService {
@@ -37,17 +33,15 @@ public class TelegramCommandService {
 
     private final TaskService taskService;
     private final TaskRepository taskRepository;
-    private final VoiceDraftService voiceDraftService;
     private final GroupRepository groupRepository;
     private final WorkspaceMemberRepository workspaceMemberRepository;
     private final UserRepository userRepository;
 
     public TelegramCommandService(TaskService taskService, TaskRepository taskRepository,
-                                   VoiceDraftService voiceDraftService, GroupRepository groupRepository,
+                                   GroupRepository groupRepository,
                                    WorkspaceMemberRepository workspaceMemberRepository, UserRepository userRepository) {
         this.taskService = taskService;
         this.taskRepository = taskRepository;
-        this.voiceDraftService = voiceDraftService;
         this.groupRepository = groupRepository;
         this.workspaceMemberRepository = workspaceMemberRepository;
         this.userRepository = userRepository;
@@ -58,7 +52,6 @@ public class TelegramCommandService {
                 📋 Mavjud komandalar:
 
                 /start - Ilova tugmasini qayta yuborish
-                /task @kimga bugun 17:00 matn - Yangi vazifa yaratish
                 /my - Mening ochiq vazifalarim
                 /due - Muddati bor vazifalar
                 /done TASK-0001 - Vazifani bajarildi deb belgilash
@@ -130,118 +123,6 @@ public class TelegramCommandService {
             return "✅ TASK-" + String.format("%04d", sequenceNumber) + " (\"" + task.getTitle() + "\") bajarildi deb belgilandi.";
         } catch (ApiException exception) {
             return exception.getMessage();
-        }
-    }
-
-    /**
-     * Parses a typed "/task ..." command (or the text of a message someone replied to with a
-     * bare "/task") and stores the resulting draft for the Mini App to pick up - nothing is
-     * created in the database here, exactly like {@link #handleVoiceTask}: the user reviews and
-     * actually creates the task in the Mini App's form.
-     */
-    public VoicePreview handleTextTask(Chat chat, User telegramUser, String text, Long topicId) {
-        Optional<CommandContext> context = resolveContext(chat, telegramUser);
-        if (context.isEmpty()) return VoicePreview.error(workspaceUnresolvedMessage(chat));
-        CommandContext ctx = context.get();
-
-        VoiceDraftResponse draft;
-        try {
-            draft = voiceDraftService.createDraftFromText(ctx.userId(), ctx.workspaceId(), text);
-        } catch (ApiException exception) {
-            return VoicePreview.error(exception.getMessage());
-        }
-        draft = withGroupFallback(draft, ctx, topicId);
-
-        long draftId = voiceDraftService.storePendingDraft(ctx.workspaceId(), ctx.userId(), draft, null, null);
-        return VoicePreview.pending(draftId, formatDraftPreview(draft, false));
-    }
-
-    /**
-     * Transcribes a Telegram voice message and stores the resulting draft for the Mini App to
-     * pick up - nothing is created in the database here. The caller opens the Mini App
-     * (pre-filled with this draft) for the user to review/edit and create it there, exactly
-     * like the in-app voice recorder flow.
-     */
-    public VoicePreview handleVoiceTask(Chat chat, User telegramUser, byte[] audio, String mimeType, Long topicId) {
-        Optional<CommandContext> context = resolveContext(chat, telegramUser);
-        if (context.isEmpty()) return VoicePreview.error(workspaceUnresolvedMessage(chat));
-        CommandContext ctx = context.get();
-
-        VoiceDraftResponse draft;
-        try {
-            draft = voiceDraftService.createDraftFromAudio(ctx.userId(), ctx.workspaceId(), audio, mimeType);
-        } catch (ApiException exception) {
-            return VoicePreview.error(exception.getMessage());
-        }
-        draft = withGroupFallback(draft, ctx, topicId);
-
-        long draftId = voiceDraftService.storePendingDraft(ctx.workspaceId(), ctx.userId(), draft, audio, mimeType);
-        return VoicePreview.pending(draftId, formatDraftPreview(draft, true));
-    }
-
-    public String cancelVoiceTask(long draftId) {
-        voiceDraftService.discardPendingDraft(draftId);
-        return "❌ Bekor qilindi.";
-    }
-
-    /** Remembers where a draft's preview message was posted, so it can be deleted once the task is created. */
-    public void attachDraftMessage(long draftId, long chatId, int messageId) {
-        voiceDraftService.attachPreviewMessage(draftId, chatId, messageId);
-    }
-
-    /**
-     * Fills in the group the /task command was typed in when the LLM didn't detect one from the
-     * text, and attaches the topic (forum sub-thread) the command was sent from - but only when
-     * the draft ends up targeting that same chat's group, since a topic id only makes sense there.
-     */
-    private VoiceDraftResponse withGroupFallback(VoiceDraftResponse draft, CommandContext ctx, Long topicId) {
-        if (ctx.groupId() == null) return draft;
-        Long groupId = draft.groupId() != null ? draft.groupId() : ctx.groupId();
-        Long resolvedTopicId = ctx.groupId().equals(groupId) ? topicId : draft.topicId();
-        if (groupId.equals(draft.groupId()) && Objects.equals(resolvedTopicId, draft.topicId())) {
-            return draft;
-        }
-        return new VoiceDraftResponse(draft.transcript(), draft.title(), draft.description(), draft.dueAt(),
-                draft.assigneeIds(), draft.unmatchedAssigneeNames(), groupId, draft.unmatchedGroupName(),
-                draft.reminderMinutes(), resolvedTopicId);
-    }
-
-    private String formatDraftPreview(VoiceDraftResponse draft, boolean fromVoice) {
-        StringBuilder preview = new StringBuilder("📝 Vazifa drafti tayyor\n\n");
-        if (draft.transcript() != null && !draft.transcript().isBlank()) {
-            preview.append("\"").append(draft.transcript()).append("\"\n\n");
-        }
-        preview.append("📌 ").append(draft.title());
-        if (draft.description() != null && !draft.description().isBlank()) {
-            preview.append("\n").append(draft.description());
-        }
-        if (draft.dueAt() != null) {
-            preview.append("\n⏰ Muddat: ").append(DUE_FORMAT.format(draft.dueAt().atZone(APP_ZONE)));
-        }
-        if (draft.unmatchedAssigneeNames() != null && !draft.unmatchedAssigneeNames().isEmpty()) {
-            preview.append("\n⚠️ Mas'ul sifatida topilmadi: ").append(String.join(", ", draft.unmatchedAssigneeNames()));
-        }
-        if (draft.unmatchedGroupName() != null && !draft.unmatchedGroupName().isBlank()) {
-            preview.append("\n⚠️ Guruh sifatida topilmadi: ").append(draft.unmatchedGroupName());
-        }
-        preview.append("\n\nManba: ").append(fromVoice ? "ovozli xabar" : "matnli xabar")
-                .append("\nVazifa hali yaratilmagan. Formada tekshirib, saqlang.");
-        return preview.toString();
-    }
-
-    public sealed interface VoicePreview {
-        record Pending(long draftId, String previewText) implements VoicePreview {
-        }
-
-        record Error(String message) implements VoicePreview {
-        }
-
-        static VoicePreview pending(long draftId, String previewText) {
-            return new Pending(draftId, previewText);
-        }
-
-        static VoicePreview error(String message) {
-            return new Error(message);
         }
     }
 

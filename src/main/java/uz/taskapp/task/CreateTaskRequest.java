@@ -20,7 +20,6 @@ public record CreateTaskRequest(
         Instant dueAt,
         Integer reminderMinutes,
         List<Long> assigneeIds,
-        @Valid List<CreateChecklistItemRequest> checklist,
-        Long voiceDraftId
+        @Valid List<CreateChecklistItemRequest> checklist
 ) {
 }

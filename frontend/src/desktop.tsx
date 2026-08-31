@@ -46,10 +46,6 @@ import {
   TaskPlaceSheet,
   TaskRulesScreen,
   TopicPickerSheet,
-  VoiceQuickCreateFab,
-  VoiceQuickCreateModal,
-  VoiceReadyCard,
-  VoiceTaskRecorder,
   attachmentItems,
   deadlinePreset,
   defaultTaskFilter,
@@ -80,7 +76,6 @@ import type {
   TaskView,
   TaskVisibility,
   TelegramTopic,
-  VoiceDraftResult,
   WorkspaceMember,
 } from './main'
 
@@ -101,7 +96,6 @@ export interface DesktopShellProps {
   groups: LinkedGroup[]
   workspaceMembers: WorkspaceMember[]
   activeWorkspaceId: number | null
-  voiceAvailable: boolean
   workspaceSwitching: boolean
   newWorkspaceName: string
   creatingWorkspace: boolean
@@ -225,7 +219,6 @@ export function DesktopShell(props: DesktopShellProps) {
             workspaceMembers={props.workspaceMembers}
             currentUserId={props.auth.user.id}
             activeWorkspaceId={props.activeWorkspaceId}
-            voiceAvailable={props.voiceAvailable}
             onChangeStatus={props.onChangeStatus}
             onSaveTask={props.onSaveTask}
             onCreateTask={props.onCreateTask}
@@ -296,7 +289,6 @@ function DesktopTasksView({
   workspaceMembers,
   currentUserId,
   activeWorkspaceId,
-  voiceAvailable,
   onChangeStatus,
   onSaveTask,
   onCreateTask,
@@ -325,7 +317,6 @@ function DesktopTasksView({
   workspaceMembers: WorkspaceMember[]
   currentUserId?: number
   activeWorkspaceId: number | null
-  voiceAvailable: boolean
   onChangeStatus: (taskId: number, status: TaskStatus) => void
   onSaveTask: DesktopShellProps['onSaveTask']
   onCreateTask: DesktopShellProps['onCreateTask']
@@ -355,16 +346,7 @@ function DesktopTasksView({
   const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null)
   const [creating, setCreating] = useState(false)
   const [createDefaults, setCreateDefaults] = useState<TaskStatus>('NEW')
-  const [pendingVoiceDraft, setPendingVoiceDraft] = useState<{ draft: VoiceDraftResult; audioFile?: File } | undefined>(undefined)
-  const [quickVoiceOpen, setQuickVoiceOpen] = useState(false)
   const detailDirtyRef = useRef(false)
-
-  function handleQuickVoiceDraft(draft: VoiceDraftResult, audioFile?: File) {
-    setPendingVoiceDraft({ draft, audioFile })
-    setCreateDefaults('NEW')
-    setQuickVoiceOpen(false)
-    setCreating(true)
-  }
 
   function requestSelectTask(id: number | null) {
     if (detailDirtyRef.current && !window.confirm(t('edit.discardChangesConfirm'))) return
@@ -427,7 +409,6 @@ function DesktopTasksView({
         <button type="button" className="desktop-add-task" onClick={() => { setCreateDefaults('NEW'); setCreating(true) }}>
           <Plus size={18} />
         </button>
-        {voiceAvailable && activeWorkspaceId && <VoiceQuickCreateFab onClick={() => setQuickVoiceOpen(true)} />}
       </div>
 
       {view === 'BOARD' ? (
@@ -529,11 +510,6 @@ function DesktopTasksView({
           groups={groups}
           workspaceMembers={workspaceMembers}
           currentUserId={currentUserId}
-          workspaceId={activeWorkspaceId ?? undefined}
-          accessToken={auth.accessToken}
-          voiceAvailable={voiceAvailable}
-          initialDraft={pendingVoiceDraft?.draft}
-          initialAudioFile={pendingVoiceDraft?.audioFile}
           defaultStatus={createDefaults}
           availableGroups={availableGroups}
           availableGroupsLoading={availableGroupsLoading}
@@ -546,17 +522,8 @@ function DesktopTasksView({
           groupPickerBusy={groupPickerBusy}
           onOpenNativeGroupPicker={onOpenNativeGroupPicker}
           onAddBotToGroup={onAddBotToGroup}
-          onClose={() => { setCreating(false); setPendingVoiceDraft(undefined) }}
+          onClose={() => setCreating(false)}
           onCreate={async (input) => onCreateTask(input)}
-        />
-      )}
-
-      {quickVoiceOpen && activeWorkspaceId && (
-        <VoiceQuickCreateModal
-          workspaceId={activeWorkspaceId}
-          accessToken={auth.accessToken}
-          onDraft={handleQuickVoiceDraft}
-          onClose={() => setQuickVoiceOpen(false)}
         />
       )}
     </div>
@@ -1312,11 +1279,6 @@ function NewTaskModal({
   groups,
   workspaceMembers,
   currentUserId,
-  workspaceId,
-  accessToken,
-  voiceAvailable,
-  initialDraft,
-  initialAudioFile,
   defaultStatus,
   availableGroups,
   availableGroupsLoading,
@@ -1335,11 +1297,6 @@ function NewTaskModal({
   groups: LinkedGroup[]
   workspaceMembers: WorkspaceMember[]
   currentUserId?: number
-  workspaceId?: number
-  accessToken?: string
-  voiceAvailable: boolean
-  initialDraft?: VoiceDraftResult
-  initialAudioFile?: File
   defaultStatus: TaskStatus
   availableGroups: AvailableTelegramGroup[]
   availableGroupsLoading: boolean
@@ -1356,29 +1313,20 @@ function NewTaskModal({
   onCreate: DesktopShellProps['onCreateTask']
 }) {
   const { t } = useI18n()
-  const initialGroup = initialDraft?.groupId ? groups.find((group) => group.id === initialDraft.groupId) : undefined
-  const [title, setTitle] = useState(initialDraft?.title ?? '')
-  const [description, setDescription] = useState(initialDraft?.description ?? '')
-  const [visibility, setVisibility] = useState<TaskVisibility>(initialGroup ? 'GROUP' : 'WORKSPACE')
-  const [groupId, setGroupId] = useState<number | undefined>(initialGroup?.id)
+  const [title, setTitle] = useState('')
+  const [description, setDescription] = useState('')
+  const [visibility, setVisibility] = useState<TaskVisibility>('WORKSPACE')
+  const [groupId, setGroupId] = useState<number | undefined>(undefined)
   const [topicId, setTopicId] = useState<number | undefined>(undefined)
   const [topicSheetOpen, setTopicSheetOpen] = useState(false)
-  const [assigneeIds, setAssigneeIds] = useState<number[]>(initialGroup ? initialDraft?.assigneeIds ?? [] : [])
+  const [assigneeIds, setAssigneeIds] = useState<number[]>([])
   const [priority, setPriority] = useState<TaskPriority>('NORMAL')
   const [status, setStatus] = useState<TaskStatus>(defaultStatus)
-  const [dueAt, setDueAt] = useState<string | undefined>(initialDraft?.dueAt)
-  const [reminderMinutes, setReminderMinutes] = useState<number | undefined>(
-    initialDraft?.dueAt ? initialDraft.reminderMinutes : undefined
-  )
+  const [dueAt, setDueAt] = useState<string | undefined>(undefined)
+  const [reminderMinutes, setReminderMinutes] = useState<number | undefined>(undefined)
   const [checklist, setChecklist] = useState<Array<{ id: number; text: string; done: boolean }>>([])
   const [checklistDraft, setChecklistDraft] = useState('')
-  const [attachments, setAttachments] = useState<AttachmentItem[]>(
-    initialAudioFile ? [{ id: Date.now(), name: initialAudioFile.name, file: initialAudioFile }] : []
-  )
-  const [voiceReady, setVoiceReady] = useState<{ transcript: string; audioFile: File } | null>(
-    initialDraft && initialAudioFile ? { transcript: initialDraft.transcript, audioFile: initialAudioFile } : null
-  )
-  const [voiceRerecording, setVoiceRerecording] = useState(false)
+  const [attachments, setAttachments] = useState<AttachmentItem[]>([])
   const [saving, setSaving] = useState(false)
   const [placeSheetOpen, setPlaceSheetOpen] = useState(false)
   const [deadlineSheetOpen, setDeadlineSheetOpen] = useState(false)
@@ -1394,16 +1342,6 @@ function NewTaskModal({
       : workspaceMembers.filter((member) => member.active && !member.temporarilyBlocked)
           .map((member) => ({ id: member.id, name: workspaceMemberName(t, member), username: member.username, photoUrl: member.photoUrl }))
   const placeLabelText = visibility === 'GROUP' ? selectedGroup?.title ?? t('place.GROUP') : placeLabel(t, visibility)
-
-  useEffect(() => {
-    if (initialDraft?.unmatchedAssigneeNames.length) {
-      showTelegramMessage(t('voice.unmatchedAssignees', { names: initialDraft.unmatchedAssigneeNames.join(', ') }))
-    }
-    if (initialDraft?.unmatchedGroupName) {
-      showTelegramMessage(t('voice.unmatchedGroup', { name: initialDraft.unmatchedGroupName }))
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
 
   async function submit() {
     if (!title.trim()) return
@@ -1427,53 +1365,6 @@ function NewTaskModal({
     if (created) onClose()
   }
 
-  function applyVoiceDraft(draft: VoiceDraftResult, audioFile?: File) {
-    setTitle((current) => current || draft.title)
-    setDescription((current) => (current ? `${current}\n${draft.transcript}` : draft.transcript))
-    if (draft.dueAt) setDueAt(draft.dueAt)
-    if (draft.reminderMinutes !== undefined && (draft.dueAt || dueAt)) setReminderMinutes(draft.reminderMinutes)
-    let targetsGroup = visibility !== 'PERSONAL'
-    if (draft.groupId) {
-      const matchedGroup = groups.find((group) => group.id === draft.groupId)
-      if (matchedGroup) {
-        setVisibility('GROUP')
-        setGroupId(matchedGroup.id)
-        targetsGroup = true
-        if (draft.topicId) setTopicId(draft.topicId)
-      }
-    }
-    if (targetsGroup && draft.assigneeIds.length) {
-      setAssigneeIds((current) => Array.from(new Set([...current, ...draft.assigneeIds])))
-    }
-    if (draft.unmatchedAssigneeNames.length) {
-      showTelegramMessage(t('voice.unmatchedAssignees', { names: draft.unmatchedAssigneeNames.join(', ') }))
-    }
-    if (draft.unmatchedGroupName) {
-      showTelegramMessage(t('voice.unmatchedGroup', { name: draft.unmatchedGroupName }))
-    }
-    if (audioFile) {
-      setAttachments((current) => [...current, { id: Date.now(), name: audioFile.name, file: audioFile }])
-      setVoiceReady({ transcript: draft.transcript, audioFile })
-    }
-    setVoiceRerecording(false)
-  }
-
-  function removeVoiceAudio(file: File) {
-    setAttachments((current) => current.filter((item) => item.file !== file))
-  }
-
-  function rerecordVoice() {
-    if (voiceReady) removeVoiceAudio(voiceReady.audioFile)
-    setVoiceReady(null)
-    setVoiceRerecording(true)
-  }
-
-  function removeVoiceReady() {
-    if (voiceReady) removeVoiceAudio(voiceReady.audioFile)
-    setVoiceReady(null)
-    setVoiceRerecording(false)
-  }
-
   return (
     <div className="desktop-modal-backdrop" onMouseDown={(event) => { if (event.currentTarget === event.target) onClose() }}>
       <div className="desktop-modal desktop-modal-wide">
@@ -1485,27 +1376,6 @@ function NewTaskModal({
           <span>{t('create.name')}</span>
           <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder={t('create.namePlaceholder')} autoFocus />
         </label>
-        {voiceAvailable && workspaceId && accessToken && (
-          voiceReady
-            ? (
-              <VoiceReadyCard
-                transcript={voiceReady.transcript}
-                audioFile={voiceReady.audioFile}
-                onSayMore={() => setVoiceRerecording(true)}
-                onRerecord={rerecordVoice}
-                onRemove={removeVoiceReady}
-              />
-            )
-            : (
-              <VoiceTaskRecorder
-                workspaceId={workspaceId}
-                accessToken={accessToken}
-                hasExistingDraft={!!title.trim() || !!description.trim()}
-                autoStart={voiceRerecording}
-                onDraft={applyVoiceDraft}
-              />
-            )
-        )}
         <div className="desktop-modal-row">
           <button type="button" className="desktop-modal-pick" onClick={() => setPlaceSheetOpen(true)}>
             <span>{t('create.place')}</span><strong>{placeLabelText}</strong>
