@@ -13,6 +13,10 @@ import java.util.List;
 
 @Service
 public class TaskReminderScheduler {
+    private static final ZoneId TASHKENT = ZoneId.of("Asia/Tashkent");
+    private static final LocalTime QUIET_HOURS_START = LocalTime.of(20, 0);
+    private static final LocalTime QUIET_HOURS_END = LocalTime.of(9, 0);
+
     private final JdbcTemplate jdbcTemplate;
     private final TelegramTaskNotificationService notificationService;
 
@@ -20,6 +24,17 @@ public class TaskReminderScheduler {
                                  TelegramTaskNotificationService notificationService) {
         this.jdbcTemplate = jdbcTemplate;
         this.notificationService = notificationService;
+    }
+
+    /**
+     * 20:00-09:00 Asia/Tashkent - deadline-related notifications (approaching-deadline reminders,
+     * the first overdue nudge, escalations) wait until morning instead of paging someone at night.
+     * Reminders the user explicitly set their own time for ({@link #deliverPendingReminders}) are
+     * not subject to this - they fire whenever the user asked for them.
+     */
+    private boolean withinNotificationHours() {
+        LocalTime now = Instant.now().atZone(TASHKENT).toLocalTime();
+        return !now.isBefore(QUIET_HOURS_END) && now.isBefore(QUIET_HOURS_START);
     }
 
     @Scheduled(initialDelay = 15_000, fixedDelay = 30_000)
@@ -61,6 +76,7 @@ public class TaskReminderScheduler {
 
     @Scheduled(initialDelay = 20_000, fixedDelay = 60_000)
     public void deliverOverdueReminders() {
+        if (!withinNotificationHours()) return;
         List<OverdueTask> tasks = jdbcTemplate.query("""
                 SELECT t.id, t.title, t.due_at, t.visibility, t.telegram_message_id, t.topic_id,
                        t.overdue_reminder_message_id, g.telegram_chat_id
@@ -109,6 +125,80 @@ public class TaskReminderScheduler {
         }
     }
 
+    /** T-24h stage: nudges assignees (and the group, if applicable) once a deadline is within a day. */
+    @Scheduled(initialDelay = 25_000, fixedDelay = 300_000)
+    public void deliverDeadlineApproachingReminders() {
+        if (!withinNotificationHours()) return;
+        List<OverdueTask> tasks = jdbcTemplate.query("""
+                SELECT t.id, t.title, t.due_at, t.visibility, t.telegram_message_id, t.topic_id,
+                       t.overdue_reminder_message_id, g.telegram_chat_id
+                FROM tasks t
+                LEFT JOIN groups g ON g.id = t.group_id
+                WHERE t.deleted_at IS NULL
+                  AND t.due_at IS NOT NULL
+                  AND t.due_at BETWEEN CURRENT_TIMESTAMP AND CURRENT_TIMESTAMP + INTERVAL '24 hours'
+                  AND t.status NOT IN ('COMPLETED', 'CANCELLED')
+                  AND t.deadline_reminder_sent_at IS NULL
+                ORDER BY t.due_at
+                LIMIT 25
+                """, (rs, rowNum) -> new OverdueTask(rs.getLong("id"), rs.getString("title"),
+                rs.getTimestamp("due_at").toInstant(),
+                "GROUP".equals(rs.getString("visibility")),
+                rs.getObject("telegram_chat_id", Long.class),
+                rs.getObject("telegram_message_id", Long.class),
+                rs.getObject("topic_id", Long.class),
+                rs.getObject("overdue_reminder_message_id", Long.class)));
+        for (OverdueTask task : tasks) {
+            if (task.groupTask() && task.chatId() != null) {
+                notificationService.sendReminder(new TelegramTaskNotificationService.ReminderTelegramMessage(
+                        task.id(), task.chatId(), task.title(), task.dueAt(), true, false,
+                        task.messageId(), task.topicId(), taskAssignees(task.id()), null));
+            }
+            List<Long> assigneeChatIds = jdbcTemplate.query("""
+                    SELECT u.telegram_id
+                    FROM task_assignees ta
+                    JOIN users u ON u.id = ta.user_id
+                    WHERE ta.task_id = ? AND u.reminders_enabled = TRUE AND u.telegram_id IS NOT NULL
+                    """, (rs, rowNum) -> rs.getLong("telegram_id"), task.id());
+            for (Long chatId : assigneeChatIds) {
+                notificationService.sendReminder(new TelegramTaskNotificationService.ReminderTelegramMessage(
+                        task.id(), chatId, task.title(), task.dueAt(), false, false,
+                        task.messageId(), task.topicId(), List.of(), null));
+            }
+            jdbcTemplate.update("UPDATE tasks SET deadline_reminder_sent_at = ? WHERE id = ?",
+                    Timestamp.from(Instant.now()), task.id());
+        }
+    }
+
+    /** T+24h stage: a task still open a full day past its deadline gets escalated to its author once. */
+    @Scheduled(initialDelay = 35_000, fixedDelay = 300_000)
+    public void deliverDeadlineEscalations() {
+        if (!withinNotificationHours()) return;
+        List<EscalationTask> tasks = jdbcTemplate.query("""
+                SELECT t.id, t.title, t.due_at, t.telegram_message_id, t.topic_id, u.telegram_id AS author_telegram_id
+                FROM tasks t
+                JOIN users u ON u.id = t.author_id
+                WHERE t.deleted_at IS NULL
+                  AND t.due_at IS NOT NULL
+                  AND t.due_at <= CURRENT_TIMESTAMP - INTERVAL '24 hours'
+                  AND t.status NOT IN ('COMPLETED', 'CANCELLED')
+                  AND t.deadline_escalated_at IS NULL
+                  AND u.reminders_enabled = TRUE
+                  AND u.telegram_id IS NOT NULL
+                ORDER BY t.due_at
+                LIMIT 25
+                """, (rs, rowNum) -> new EscalationTask(rs.getLong("id"), rs.getString("title"),
+                rs.getTimestamp("due_at").toInstant(), rs.getObject("author_telegram_id", Long.class),
+                rs.getObject("telegram_message_id", Long.class), rs.getObject("topic_id", Long.class)));
+        for (EscalationTask task : tasks) {
+            notificationService.sendReminder(new TelegramTaskNotificationService.ReminderTelegramMessage(
+                    task.id(), task.authorTelegramId(), task.title(), task.dueAt(), false, true,
+                    task.messageId(), task.topicId(), List.of(), null));
+            jdbcTemplate.update("UPDATE tasks SET deadline_escalated_at = ? WHERE id = ?",
+                    Timestamp.from(Instant.now()), task.id());
+        }
+    }
+
     private List<TelegramTaskNotificationService.Assignee> taskAssignees(Long taskId) {
         return jdbcTemplate.query("""
                 SELECT u.first_name, u.last_name, u.telegram_id
@@ -128,4 +218,7 @@ public class TaskReminderScheduler {
 
     private record OverdueTask(Long id, String title, Instant dueAt, boolean groupTask, Long chatId,
                                Long messageId, Long topicId, Long reminderMessageId) {}
+
+    private record EscalationTask(Long id, String title, Instant dueAt, Long authorTelegramId,
+                                  Long messageId, Long topicId) {}
 }

@@ -26,7 +26,8 @@ public class AuthController {
     /** Public config the /login page needs before the user has authenticated. */
     @GetMapping("/config")
     ConfigResponse config() {
-        return new ConfigResponse(telegramProperties.botUsername());
+        String username = telegramProperties.botUsername();
+        return new ConfigResponse(username == null ? null : username.replace("@", "").trim());
     }
 
     @PostMapping("/telegram")
