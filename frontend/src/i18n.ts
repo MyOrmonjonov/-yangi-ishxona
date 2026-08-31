@@ -388,6 +388,12 @@ const uz: Dict = {
   'reminder.pickerTitle': 'Eslatma',
   'reminder.pickerSubtitle': 'Bitta variantni tanlash mumkin',
   'reminder.clear': 'Tozalash',
+
+  'login.title': 'Task App',
+  'login.subtitle': "Boshqaruv paneliga kirish uchun Telegram orqali tasdiqlang",
+  'login.loading': 'Yuklanmoqda...',
+  'login.error.config': "Kirish sozlamalarini yuklab bo'lmadi",
+  'login.error.generic': "Kirishda xatolik yuz berdi, qayta urinib ko'ring",
 }
 
 const ru: Dict = {
@@ -768,6 +774,12 @@ const ru: Dict = {
   'reminder.pickerTitle': 'Напоминание',
   'reminder.pickerSubtitle': 'Можно выбрать один вариант',
   'reminder.clear': 'Очистить',
+
+  'login.title': 'Task App',
+  'login.subtitle': 'Подтвердите вход через Telegram, чтобы открыть панель управления',
+  'login.loading': 'Загрузка...',
+  'login.error.config': 'Не удалось загрузить настройки входа',
+  'login.error.generic': 'Ошибка входа, попробуйте снова',
 }
 
 const en: Dict = {
@@ -1148,6 +1160,12 @@ const en: Dict = {
   'reminder.pickerTitle': 'Reminder',
   'reminder.pickerSubtitle': 'You can choose one option',
   'reminder.clear': 'Clear',
+
+  'login.title': 'Task App',
+  'login.subtitle': 'Sign in with Telegram to open the dashboard',
+  'login.loading': 'Loading...',
+  'login.error.config': 'Could not load sign-in settings',
+  'login.error.generic': 'Sign-in failed, please try again',
 }
 
 export const translations: Record<Lang, Dict> = { uz, ru, en }

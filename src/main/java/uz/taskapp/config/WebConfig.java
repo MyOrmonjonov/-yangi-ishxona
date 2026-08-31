@@ -18,7 +18,7 @@ public class WebConfig implements WebMvcConfigurer {
     public void addInterceptors(InterceptorRegistry registry) {
         registry.addInterceptor(authInterceptor)
                 .addPathPatterns("/api/**")
-                .excludePathPatterns("/api/auth/telegram", "/api/health");
+                .excludePathPatterns("/api/auth/telegram", "/api/auth/telegram-login", "/api/auth/config", "/api/health");
     }
 
     @Override

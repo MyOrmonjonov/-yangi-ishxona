@@ -13,10 +13,12 @@ import uz.taskapp.workspace.WorkspaceMemberRepository;
 import uz.taskapp.workspace.WorkspaceRepository;
 
 import java.util.List;
+import java.util.Map;
 
 @Service
 public class AuthService {
     private final TelegramInitDataVerifier verifier;
+    private final TelegramLoginVerifier loginVerifier;
     private final AccessTokenService tokenService;
     private final UserRepository userRepository;
     private final WorkspaceRepository workspaceRepository;
@@ -24,12 +26,14 @@ public class AuthService {
     private final AppProperties appProperties;
 
     public AuthService(TelegramInitDataVerifier verifier,
+                       TelegramLoginVerifier loginVerifier,
                        AccessTokenService tokenService,
                        UserRepository userRepository,
                        WorkspaceRepository workspaceRepository,
                        WorkspaceMemberRepository memberRepository,
                        AppProperties appProperties) {
         this.verifier = verifier;
+        this.loginVerifier = loginVerifier;
         this.tokenService = tokenService;
         this.userRepository = userRepository;
         this.workspaceRepository = workspaceRepository;
@@ -40,7 +44,17 @@ public class AuthService {
     @Transactional
     public AuthResponse authenticate(String initData) {
         VerifiedTelegramData verified = verifier.verify(initData);
-        TelegramUserData telegram = verified.user();
+        return authenticateVerified(verified.user());
+    }
+
+    /** Browser login via the Telegram Login Widget (outside the Telegram Mini App). */
+    @Transactional
+    public AuthResponse authenticateViaLoginWidget(Map<String, String> fields) {
+        TelegramUserData telegram = loginVerifier.verify(fields);
+        return authenticateVerified(telegram);
+    }
+
+    private AuthResponse authenticateVerified(TelegramUserData telegram) {
         UserEntity user = userRepository.findByTelegramId(telegram.id())
                 .orElseGet(() -> new UserEntity(telegram.id(), telegram.firstName()));
         user.updateTelegramProfile(telegram.firstName(), telegram.lastName(), telegram.username(),

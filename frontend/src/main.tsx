@@ -210,6 +210,7 @@ export function showTelegramConfirm(message: string): Promise<boolean> {
 }
 
 const MAX_ATTACHMENT_BYTES = 8 * 1024 * 1024
+export const BROWSER_SESSION_KEY = 'taskapp_browser_session'
 
 export function attachmentItems(files: FileList): { accepted: AttachmentItem[]; rejected: string[] } {
   const accepted: AttachmentItem[] = []
@@ -292,6 +293,7 @@ function App() {
   const [screen, setScreen] = useState<Screen>(screenFromHash)
   const [sheet, setSheet] = useState<Sheet>(null)
   const [auth, setAuth] = useState<AuthResponse | null>(null)
+  const [browserSession, setBrowserSession] = useState(false)
   const [tasks, setTasks] = useState<Task[]>([])
   const [archivedTasks, setArchivedTasks] = useState<Task[]>([])
   const [archivedLoading, setArchivedLoading] = useState(false)
@@ -377,11 +379,48 @@ function App() {
     return () => window.removeEventListener('hashchange', onHashChange)
   }, [])
 
+  function applySession(session: AuthResponse) {
+    setAuth(session)
+    setProfileName(authProfileName(session.user))
+    if (session.workspaces[0]) {
+      latestWorkspaceIdRef.current = session.workspaces[0].id
+      setActiveWorkspaceId(session.workspaces[0].id)
+      setWorkspaceName(session.workspaces[0].name)
+    }
+    if (session.user.uiLanguage) setLang(session.user.uiLanguage)
+    if (session.user.theme) setTheme(session.user.theme)
+    if (session.user.remindersEnabled !== undefined) setRemindersEnabled(session.user.remindersEnabled)
+    return Promise.all([loadTasks(session), loadGroups(session), loadWorkspaceMembers(session)])
+  }
+
   useEffect(() => {
     const webApp = window.Telegram?.WebApp
     webApp?.ready()
     webApp?.expand()
-    if (!webApp?.initData) return
+    if (!webApp?.initData) {
+      // Not opened inside Telegram - fall back to a browser session saved by the
+      // Telegram Login Widget page (see LoginScreen), or send the user there.
+      const stored = localStorage.getItem(BROWSER_SESSION_KEY)
+      if (!stored) {
+        window.location.hash = '#login'
+        return
+      }
+      let session: AuthResponse
+      try {
+        session = JSON.parse(stored) as AuthResponse
+      } catch {
+        localStorage.removeItem(BROWSER_SESSION_KEY)
+        window.location.hash = '#login'
+        return
+      }
+      setBrowserSession(true)
+      void applySession(session).catch((reason) => {
+        showTelegramMessage(reason instanceof Error ? reason.message : t('error.authFailed'))
+        localStorage.removeItem(BROWSER_SESSION_KEY)
+        window.location.hash = '#login'
+      })
+      return
+    }
 
     void fetch('/api/auth/telegram', {
       method: 'POST',
@@ -395,19 +434,7 @@ function App() {
         }
         return response.json() as Promise<AuthResponse>
       })
-      .then((session) => {
-        setAuth(session)
-        setProfileName(authProfileName(session.user))
-        if (session.workspaces[0]) {
-          latestWorkspaceIdRef.current = session.workspaces[0].id
-          setActiveWorkspaceId(session.workspaces[0].id)
-          setWorkspaceName(session.workspaces[0].name)
-        }
-        if (session.user.uiLanguage) setLang(session.user.uiLanguage)
-        if (session.user.theme) setTheme(session.user.theme)
-        if (session.user.remindersEnabled !== undefined) setRemindersEnabled(session.user.remindersEnabled)
-        return Promise.all([loadTasks(session), loadGroups(session), loadWorkspaceMembers(session)])
-      })
+      .then((session) => applySession(session))
       .catch((reason) => showTelegramMessage(reason instanceof Error ? reason.message : t('error.authFailed')))
   }, [])
 
@@ -1594,6 +1621,11 @@ function App() {
             onTaskRules={() => goTo('task-rules')}
             onArchive={() => { goTo('archive'); void loadArchivedTasks() }}
             onClose={() => goTo('tasks')}
+            onLogout={browserSession ? () => {
+              localStorage.removeItem(BROWSER_SESSION_KEY)
+              window.location.hash = '#login'
+              window.location.reload()
+            } : undefined}
           />
         )}
 
@@ -2923,6 +2955,7 @@ function SettingsScreen({
   onTaskRules,
   onArchive,
   onClose,
+  onLogout,
 }: {
   userName: string
   workspaceName: string
@@ -2941,6 +2974,7 @@ function SettingsScreen({
   onTaskRules: () => void
   onArchive: () => void
   onClose: () => void
+  onLogout?: () => void
 }) {
   const { t, lang } = useI18n()
   const appearanceLabel = theme === 'dark' ? t('settings.appearance.dark')
@@ -2972,9 +3006,11 @@ function SettingsScreen({
         <SettingsRow tone="purple" icon={<SlidersHorizontal />} title={t('settings.taskRules')} subtitle={t('settings.taskRules.subtitle')} onClick={onTaskRules} />
         <SettingsRow tone="gray" icon={<Archive />} title={t('settings.archive')} subtitle={t('settings.archive.subtitle')} onClick={onArchive} />
       </SettingsGroup>
-      <div className="settings-group logout-group">
-        <SettingsRow tone="red" icon={<LogOut />} title={t('settings.logout')} subtitle={t('settings.logout.subtitle')} arrow={false} />
-      </div>
+      {onLogout && (
+        <div className="settings-group logout-group">
+          <SettingsRow tone="red" icon={<LogOut />} title={t('settings.logout')} subtitle={t('settings.logout.subtitle')} arrow={false} onClick={onLogout} />
+        </div>
+      )}
     </main>
   )
 }
@@ -3898,8 +3934,105 @@ function calendarDays(month: Date) {
   })
 }
 
+function detectLang(): Lang {
+  const code = (navigator.language || 'uz').slice(0, 2).toLowerCase()
+  return code === 'ru' ? 'ru' : code === 'en' ? 'en' : 'uz'
+}
+
+interface TelegramLoginPayload {
+  id: number
+  first_name: string
+  last_name?: string
+  username?: string
+  photo_url?: string
+  auth_date: number
+  hash: string
+}
+
+declare global {
+  interface Window {
+    onTelegramAuth?: (user: TelegramLoginPayload) => void
+  }
+}
+
+function LoginScreen() {
+  const lang = useMemo(detectLang, [])
+  const t = (key: string) => translate(lang, key)
+  const [botUsername, setBotUsername] = useState<string | null>(null)
+  const [error, setError] = useState('')
+  const widgetHostRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    fetch('/api/auth/config')
+      .then((response) => response.json() as Promise<{ botUsername?: string }>)
+      .then((data) => setBotUsername(data.botUsername && data.botUsername.trim() ? data.botUsername.trim() : null))
+      .catch(() => setError(t('login.error.config')))
+  }, [])
+
+  useEffect(() => {
+    if (!botUsername || !widgetHostRef.current) return
+    widgetHostRef.current.innerHTML = ''
+    window.onTelegramAuth = (user) => {
+      const payload = {
+        id: String(user.id),
+        firstName: user.first_name,
+        lastName: user.last_name,
+        username: user.username,
+        photoUrl: user.photo_url,
+        authDate: String(user.auth_date),
+        hash: user.hash,
+      }
+      fetch('/api/auth/telegram-login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+        .then(async (response) => {
+          if (!response.ok) {
+            const body = await response.json().catch(() => null) as { message?: string } | null
+            throw new Error(body?.message || t('login.error.generic'))
+          }
+          return response.json() as Promise<AuthResponse>
+        })
+        .then((session) => {
+          localStorage.setItem(BROWSER_SESSION_KEY, JSON.stringify(session))
+          window.location.hash = '#tasks'
+          window.location.reload()
+        })
+        .catch((reason) => setError(reason instanceof Error ? reason.message : t('login.error.generic')))
+    }
+    const script = document.createElement('script')
+    script.src = 'https://telegram.org/js/telegram-widget.js?22'
+    script.async = true
+    script.setAttribute('data-telegram-login', botUsername)
+    script.setAttribute('data-size', 'large')
+    script.setAttribute('data-radius', '12')
+    script.setAttribute('data-onauth', 'onTelegramAuth(user)')
+    script.setAttribute('data-request-access', 'write')
+    widgetHostRef.current.appendChild(script)
+  }, [botUsername])
+
+  return (
+    <div className="login-screen">
+      <div className="login-card">
+        <div className="login-mark">TA</div>
+        <h1>{t('login.title')}</h1>
+        <p>{t('login.subtitle')}</p>
+        <div className="login-widget-host" ref={widgetHostRef} />
+        {!botUsername && !error && <p className="login-status">{t('login.loading')}</p>}
+        {error && <p className="login-error">{error}</p>}
+      </div>
+    </div>
+  )
+}
+
+function Root() {
+  const isLogin = typeof window !== 'undefined' && window.location.hash.startsWith('#login')
+  return isLogin ? <LoginScreen /> : <App />
+}
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App />
+    <Root />
   </StrictMode>,
 )
