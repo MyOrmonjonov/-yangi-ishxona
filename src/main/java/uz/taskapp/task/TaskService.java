@@ -208,6 +208,10 @@ public class TaskService {
         boolean assigned = assigneeRepository.existsByIdTaskIdAndIdUserId(taskId, taskAppUserId);
         boolean hasAnyAssignee = assigneeRepository.existsByIdTaskId(taskId);
         validateTelegramAction(task.getStatus(), action, author, assigned, hasAnyAssignee);
+        if (action == TelegramTaskAction.REVIEW && !fileRepository.existsByTaskId(taskId)) {
+            throw new ApiException(HttpStatus.CONFLICT, "TASK_REVIEW_REQUIRES_FILE",
+                    "Tekshiruvga yuborishdan oldin kamida bitta fayl (screenshot yoki hujjat) biriktiring");
+        }
         boolean newlyAssigned = action == TelegramTaskAction.START && !assigned;
         if (newlyAssigned) {
             assigneeRepository.save(new TaskAssigneeEntity(taskId, taskAppUserId));
@@ -248,6 +252,10 @@ public class TaskService {
             throw new ApiException(HttpStatus.FORBIDDEN, "TASK_UPDATE_FORBIDDEN", "Vazifa statusini o'zgartirishga ruxsat yo'q");
         }
         TaskStatus previous = task.getStatus();
+        if (status == TaskStatus.REVIEW && previous != TaskStatus.REVIEW && !fileRepository.existsByTaskId(taskId)) {
+            throw new ApiException(HttpStatus.CONFLICT, "TASK_REVIEW_REQUIRES_FILE",
+                    "Tekshiruvga yuborishdan oldin kamida bitta fayl (screenshot yoki hujjat) biriktiring");
+        }
         task.changeStatus(status);
         insertHistory(taskId, currentUserId, "STATUS_CHANGED",
                 "{\"from\":\"" + previous + "\",\"to\":\"" + status + "\"}");

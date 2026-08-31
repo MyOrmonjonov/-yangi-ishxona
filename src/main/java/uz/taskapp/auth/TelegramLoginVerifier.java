@@ -1,5 +1,6 @@
 package uz.taskapp.auth;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 import uz.taskapp.common.ApiException;
@@ -22,6 +23,7 @@ public class TelegramLoginVerifier {
     private final TelegramProperties properties;
     private final Clock clock;
 
+    @Autowired
     public TelegramLoginVerifier(TelegramProperties properties) {
         this(properties, Clock.systemUTC());
     }
